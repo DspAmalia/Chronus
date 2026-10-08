@@ -1,0 +1,172 @@
+﻿@page "/"
+@page "/dashboard"
+@using Chronus.Data
+@using Chronus.Models.MainModels
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ChronusDbContext> DbFactory
+@implements IAsyncDisposable
+
+<PageTitle>Chronus - Dashboard</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Control Panel - Real-Time Attendance</h2>
+        <span class="badge bg-secondary p-2">Today's Date: @DateTime.Now.ToString("dd/MM/yyyy")</span>
+    </div>
+
+    <!-- Main Indicators -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary text-white p-3">
+                <div class="card-body">
+                    <h6 class="text-uppercase mb-2 fs-7">Present Today</h6>
+                    <h2 class="display-6 fw-bold mb-0">@presentEmployeesCount</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success text-white p-3">
+                <div class="card-body">
+                    <h6 class="text-uppercase mb-2 fs-7">Active at Work</h6>
+                    <h2 class="display-6 fw-bold mb-0">@workingEmployeesCount</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning text-dark p-3">
+                <div class="card-body">
+                    <h6 class="text-uppercase mb-2 fs-7">On Break</h6>
+                    <h2 class="display-6 fw-bold mb-0">@onBreakEmployeesCount</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-info text-white p-3">
+                <div class="card-body">
+                    <h6 class="text-uppercase mb-2 fs-7">Total Hours Today</h6>
+                    <h2 class="display-6 fw-bold mb-0">@totalHoursToday h</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Team Status Table -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Team Status (Today)</h5>
+            <span class="text-muted small">Auto-refresh every 5s</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Employee</th>
+                            <th>Clock In (UTC)</th>
+                            <th>Last Signal</th>
+                            <th>Break (Mins)</th>
+                            <th>Net Work Time</th>
+                            <th>Current Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (todayEntries.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">No attendance records for today.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var entry in todayEntries)
+                            {
+                                var hours = entry.NetWorkMinutes / 60;
+                                var mins = entry.NetWorkMinutes % 60;
+
+                                <tr>
+                                    <td>
+                                        <strong>@entry.Employee?.FirstName @entry.Employee?.LastName</strong>
+                                    </td>
+                                    <td>@entry.ClockInUtc.ToString("HH:mm:ss")</td>
+                                    <td>@(entry.ClockOutUtc?.ToString("HH:mm:ss") ?? "-")</td>
+                                    <td>@entry.TotalBreakMinutes mins</td>
+                                    <td><strong>@hours h @mins m</strong></td>
+                                    <td>
+                                        @if (entry.ClockOutUtc.HasValue)
+                                        {
+                                            <span class="badge bg-warning text-dark px-3 py-2">⏸️ On Break</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success px-3 py-2">▶️ Active at Work</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<TimeEntry> todayEntries = new();
+    private int presentEmployeesCount;
+    private int workingEmployeesCount;
+    private int onBreakEmployeesCount;
+    private string totalHoursToday = "0";
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshDashboardDataAsync();
+
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _ = PollDataAsync();
+    }
+
+    private async Task PollDataAsync()
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(_cts.Token))
+            {
+                await RefreshDashboardDataAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task RefreshDashboardDataAsync()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        todayEntries = await db.TimeEntries
+            .Include(t => t.Employee)
+            .Where(t => t.Date == today)
+            .ToListAsync();
+
+        presentEmployeesCount = todayEntries.Count;
+        workingEmployeesCount = todayEntries.Count(t => !t.ClockOutUtc.HasValue);
+        onBreakEmployeesCount = todayEntries.Count(t => t.ClockOutUtc.HasValue);
+
+        var totalMinutes = todayEntries.Sum(t => t.NetWorkMinutes);
+        totalHoursToday = (totalMinutes / 60.0).ToString("F1");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        _timer?.Dispose();
+    }
+}

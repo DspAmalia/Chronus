@@ -1,0 +1,138 @@
+﻿@page "/clocking"
+@using Chronus.Data
+@using Chronus.Models.MainModels
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ChronusDbContext> DbFactory
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+<PageTitle>Pontaj Angajați - Chronus</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📋 Pontaj Zilnic Angajați</h2>
+        <button class="btn btn-outline-primary" @onclick="LoadDataAsync">🔄 Reîmprospătează</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Se încarcă...</span>
+        </div>
+    }
+    else if (!timeEntries.Any())
+    {
+        <div class="alert alert-info">
+            Nu există înregistrări de pontaj pentru ziua de azi.
+        </div>
+    }
+    else
+    {
+        <table class="table table-hover table-bordered align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Angajat</th>
+                    <th>Data</th>
+                    <th>Ora Sosire (Clock-In)</th>
+                    <th>Timp Lucrat</th>
+                    <th>Pauză</th>
+                    <th>Scor Încredere</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in timeEntries)
+                {
+                    <tr>
+                        <td>
+                            <strong>@entry.Employee?.FirstName @entry.Employee?.LastName</strong><br />
+                            <small class="text-muted">@entry.Employee?.Email</small>
+                        </td>
+                        <td>@entry.Date.ToString("dd.MM.yyyy")</td>
+                        <td>@entry.ClockInUtc.ToLocalTime().ToString("HH:mm:ss")</td>
+                        <td>
+                            <span class="badge bg-success fs-6">
+                                @(entry.NetWorkMinutes / 60)h @(entry.NetWorkMinutes % 60)m
+                            </span>
+                        </td>
+                        <td>@(entry.TotalBreakMinutes) min</td>
+                        <td>
+                            <span class="badge bg-info text-dark">
+                                @((entry.ConfidenceScore * 100).ToString("F0"))%
+                            </span>
+                        </td>
+                        <td>
+                            @if (entry.ClockOutUtc.HasValue && entry.Status == EntryStatus.InProgress)
+                            {
+                                <span class="badge bg-warning text-dark">⏸️ În Pauză</span>
+                            }
+                            else switch (entry.Status)
+                                {
+                                    case EntryStatus.InProgress:
+                                        <span class="badge bg-primary">▶️ La Lucru</span>
+                                        break;
+                                    case EntryStatus.Approved:
+                                        <span class="badge bg-success">✅ Aprobat</span>
+                                        break;
+                                    default:
+                                        <span class="badge bg-secondary">@entry.Status</span>
+                                        break;
+                                }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<TimeEntry> timeEntries = new();
+    private bool isLoading = true;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+
+        // Pornim un timer care declanșează reîmprospătarea la fiecare 5 secunde
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _ = PollDatabaseAsync();
+    }
+
+    private async Task PollDatabaseAsync()
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(_cts.Token))
+            {
+                await LoadDataAsync();
+                await InvokeAsync(StateHasChanged); // Forțează rerandarea componentei Blazor
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Se execută normal când părăsim pagina sau se distruge componenta
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        timeEntries = await db.TimeEntries
+            .Include(t => t.Employee)
+            .OrderByDescending(t => t.Date)
+            .ToListAsync();
+
+        isLoading = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        _timer?.Dispose();
+    }
+}
