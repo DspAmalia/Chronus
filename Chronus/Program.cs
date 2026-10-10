@@ -13,6 +13,10 @@ builder.Services.AddRazorComponents()
 builder.Services.AddDbContextFactory<ChronusDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddQuickGridEntityFrameworkAdapter();
+
+builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -28,6 +32,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
+    app.UseMigrationsEndPoint();
 }
 
 // ⚠️ AICI ERA GREȘEALA: Am scos Swagger-ul în afara blocului "!app.Environment.IsDevelopment()"

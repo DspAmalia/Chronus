@@ -1,0 +1,120 @@
+﻿@page "/roles/delete"
+@using Microsoft.EntityFrameworkCore
+@using Chronus.Models.MainModels
+@inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Delete Role | Chronus</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <!-- Header Navigare -->
+            <div class="mb-3">
+                <a href="/roles" class="text-decoration-none text-muted small">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Roles List
+                </a>
+            </div>
+
+            <!-- Card Confirmare Ștergere -->
+            <div class="card border-danger shadow-sm">
+                <div class="card-header bg-danger text-white py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Delete Role</h4>
+                            <p class="mb-0 small opacity-75">Are you sure you want to permanently delete this role?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (role is null)
+                    {
+                        <div class="d-flex justify-content-center py-4">
+                            <div class="spinner-border text-danger" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning border-0 d-flex align-items-center mb-4" role="alert">
+                            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                            <div class="small">
+                                Employees currently assigned to this role will become <strong>unassigned</strong>.
+                            </div>
+                        </div>
+
+                        <div class="bg-light p-3 rounded mb-4 border">
+                            <div class="row mb-2">
+                                <div class="col-sm-4 text-muted fw-semibold">Role Name:</div>
+                                <div class="col-sm-8 fw-bold">@role.Name</div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-4 text-muted fw-semibold">Description:</div>
+                                <div class="col-sm-8">@(string.IsNullOrWhiteSpace(role.Description) ? "-" : role.Description)</div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                            <a href="/roles" class="btn btn-light px-4">Cancel</a>
+                            <button type="button" @onclick="DeleteRole" class="btn btn-danger px-4 d-flex align-items-center gap-2" disabled="@isDeleting">
+                                @if (isDeleting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    <span>Deleting...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-trash-fill"></i>
+                                    <span>Confirm Delete</span>
+                                }
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Role? role;
+    private bool isDeleting = false;
+
+    [SupplyParameterFromQuery]
+    private Guid Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        role = await context.Roles.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (role is null)
+        {
+            NavigationManager.NavigateTo("/roles");
+        }
+    }
+
+    private async Task DeleteRole()
+    {
+        if (role is null || isDeleting) return;
+        isDeleting = true;
+
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            context.Roles.Remove(role);
+            await context.SaveChangesAsync();
+
+            NavigationManager.NavigateTo("/roles");
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+}

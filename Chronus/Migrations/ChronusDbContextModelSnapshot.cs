@@ -22,6 +22,24 @@ namespace Chronus.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Chronus.Models.MainModels.Department", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Departments");
+                });
+
             modelBuilder.Entity("Chronus.Models.MainModels.Employee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -33,6 +51,9 @@ namespace Chronus.Migrations
 
                     b.Property<int>("DailyTargetMinutes")
                         .HasColumnType("int");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -52,10 +73,17 @@ namespace Chronus.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<Guid?>("RoleId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("RoleId");
 
                     b.ToTable("Employees");
                 });
@@ -88,6 +116,24 @@ namespace Chronus.Migrations
                     b.HasIndex("EmployeeId");
 
                     b.ToTable("RawAuditEvents");
+                });
+
+            modelBuilder.Entity("Chronus.Models.MainModels.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Roles");
                 });
 
             modelBuilder.Entity("Chronus.Models.MainModels.TimeEntry", b =>
@@ -153,6 +199,23 @@ namespace Chronus.Migrations
                     b.ToTable("UserDevices");
                 });
 
+            modelBuilder.Entity("Chronus.Models.MainModels.Employee", b =>
+                {
+                    b.HasOne("Chronus.Models.MainModels.Department", "Department")
+                        .WithMany("Employees")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Chronus.Models.MainModels.Role", "Role")
+                        .WithMany("Employees")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("Chronus.Models.MainModels.RawAuditEvent", b =>
                 {
                     b.HasOne("Chronus.Models.MainModels.UserDevice", "Device")
@@ -194,6 +257,11 @@ namespace Chronus.Migrations
                     b.Navigation("Employee");
                 });
 
+            modelBuilder.Entity("Chronus.Models.MainModels.Department", b =>
+                {
+                    b.Navigation("Employees");
+                });
+
             modelBuilder.Entity("Chronus.Models.MainModels.Employee", b =>
                 {
                     b.Navigation("Devices");
@@ -201,6 +269,11 @@ namespace Chronus.Migrations
                     b.Navigation("RawEvents");
 
                     b.Navigation("TimeEntries");
+                });
+
+            modelBuilder.Entity("Chronus.Models.MainModels.Role", b =>
+                {
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("Chronus.Models.MainModels.UserDevice", b =>

@@ -5,78 +5,147 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ChronusDbContext> DbFactory
 @implements IAsyncDisposable
+@rendermode InteractiveServer
 
-<PageTitle>Chronus - Dashboard</PageTitle>
+<PageTitle>Dashboard | Chronus</PageTitle>
 
-<div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Control Panel - Real-Time Attendance</h2>
-        <span class="badge bg-secondary p-2">Today's Date: @DateTime.Now.ToString("dd/MM/yyyy")</span>
+<div class="container-fluid mt-4 px-4">
+    <!-- Header Principal -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+        <div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-3 text-white p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: linear-gradient(135deg, #4f46e5, #6366f1);">
+                    <i class="bi bi-speedometer2 fs-5"></i>
+                </div>
+                <div>
+                    <h3 class="fw-bold text-dark mb-0">Control Panel</h3>
+                    <p class="text-muted small mb-0">Real-time time tracking, team activity monitoring, and attendance analytics.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-light border rounded-3 px-3 py-2 d-flex align-items-center gap-2">
+                <i class="bi bi-calendar3" style="color: #4f46e5;"></i>
+                <span class="text-muted small">Today:</span>
+                <strong class="text-dark small">@DateTime.Now.ToString("dd MMM yyyy")</strong>
+            </div>
+        </div>
     </div>
 
-    <!-- Main Indicators -->
+    <!-- KPI Cards (Refăcute pentru contrast și lizibilitate) -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-primary text-white p-3">
-                <div class="card-body">
-                    <h6 class="text-uppercase mb-2 fs-7">Present Today</h6>
+        <!-- Present Today -->
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 text-white card-hover transition-all position-relative overflow-hidden"
+                 style="background: linear-gradient(135deg, #2563eb, #1d4ed8);">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-uppercase fw-bold fs-8" style="color: rgba(255, 255, 255, 0.8);">Present Today</span>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white"
+                         style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2);">
+                        <i class="bi bi-people-fill fs-5"></i>
+                    </div>
+                </div>
+                <div class="d-flex align-items-baseline gap-2 mt-2">
                     <h2 class="display-6 fw-bold mb-0">@presentEmployeesCount</h2>
+                    <span class="small" style="color: rgba(255, 255, 255, 0.8);">employees</span>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-success text-white p-3">
-                <div class="card-body">
-                    <h6 class="text-uppercase mb-2 fs-7">Active at Work</h6>
+        <!-- Active at Work -->
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 text-white card-hover transition-all position-relative overflow-hidden"
+                 style="background: linear-gradient(135deg, #059669, #047857);">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-uppercase fw-bold fs-8" style="color: rgba(255, 255, 255, 0.8);">Active at Work</span>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white"
+                         style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2);">
+                        <i class="bi bi-play-circle-fill fs-5"></i>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-2">
                     <h2 class="display-6 fw-bold mb-0">@workingEmployeesCount</h2>
+                    <span class="badge rounded-pill px-2.5 py-1 small" style="background-color: rgba(255, 255, 255, 0.25); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                        <i class="bi bi-circle-fill me-1 fs-9 text-light"></i> Active
+                    </span>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-warning text-dark p-3">
-                <div class="card-body">
-                    <h6 class="text-uppercase mb-2 fs-7">On Break</h6>
-                    <h2 class="display-6 fw-bold mb-0">@onBreakEmployeesCount</h2>
+        <!-- On Break -->
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 text-dark card-hover transition-all position-relative overflow-hidden"
+                 style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-uppercase fw-bold fs-8 text-white">On Break</span>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white"
+                         style="width: 40px; height: 40px; background-color: rgba(0, 0, 0, 0.15);">
+                        <i class="bi bi-pause-circle-fill fs-5"></i>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-2">
+                    <h2 class="display-6 fw-bold text-white mb-0">@onBreakEmployeesCount</h2>
+                    <span class="badge rounded-pill px-2.5 py-1 small" style="background-color: rgba(0, 0, 0, 0.2); color: #ffffff; border: 1px solid rgba(0, 0, 0, 0.1);">
+                        <i class="bi bi-pause-fill me-1"></i> Paused
+                    </span>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-info text-white p-3">
-                <div class="card-body">
-                    <h6 class="text-uppercase mb-2 fs-7">Total Hours Today</h6>
-                    <h2 class="display-6 fw-bold mb-0">@totalHoursToday h</h2>
+        <!-- Total Hours Today -->
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 text-white card-hover transition-all position-relative overflow-hidden"
+                 style="background: linear-gradient(135deg, #0284c7, #0369a1);">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="text-uppercase fw-bold fs-8" style="color: rgba(255, 255, 255, 0.8);">Total Hours Today</span>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white"
+                         style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2);">
+                        <i class="bi bi-clock-history fs-5"></i>
+                    </div>
+                </div>
+                <div class="d-flex align-items-baseline gap-2 mt-2">
+                    <h2 class="display-6 fw-bold mb-0">@totalHoursToday</h2>
+                    <span class="small" style="color: rgba(255, 255, 255, 0.8);">hours</span>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Live Team Status Table -->
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Team Status (Today)</h5>
-            <span class="text-muted small">Auto-refresh every 5s</span>
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-header bg-white py-3 border-bottom border-light d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-activity" style="color: #4f46e5;"></i>
+                <h5 class="fw-bold text-dark mb-0">Team Status (Today)</h5>
+            </div>
+            <div class="d-flex align-items-center gap-2 text-muted small">
+                <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
+                <span>Auto-refreshing every 5s</span>
+            </div>
         </div>
+
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
+                    <thead class="bg-light text-uppercase fs-8 text-muted fw-bold">
                         <tr>
-                            <th>Employee</th>
-                            <th>Clock In (UTC)</th>
-                            <th>Last Signal</th>
-                            <th>Break (Mins)</th>
-                            <th>Net Work Time</th>
-                            <th>Current Status</th>
+                            <th class="ps-4 py-3">Employee</th>
+                            <th class="py-3">Clock In (UTC)</th>
+                            <th class="py-3">Last Signal</th>
+                            <th class="py-3">Break Time</th>
+                            <th class="py-3">Net Work Time</th>
+                            <th class="pe-4 py-3 text-end">Current Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (todayEntries.Count == 0)
                         {
                             <tr>
-                                <td colspan="6" class="text-center py-4 text-muted">No attendance records for today.</td>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-calendar-x display-6 d-block mb-2 text-muted opacity-50"></i>
+                                    <span>No attendance records logged for today.</span>
+                                </td>
                             </tr>
                         }
                         else
@@ -85,23 +154,52 @@
                             {
                                 var hours = entry.NetWorkMinutes / 60;
                                 var mins = entry.NetWorkMinutes % 60;
+                                var empName = $"{entry.Employee?.FirstName} {entry.Employee?.LastName}".Trim();
+                                var initials = !string.IsNullOrWhiteSpace(empName)
+                                ? empName.Substring(0, Math.Min(2, empName.Length)).ToUpper()
+                                : "EM";
 
                                 <tr>
-                                    <td>
-                                        <strong>@entry.Employee?.FirstName @entry.Employee?.LastName</strong>
+                                    <td class="ps-4 py-3">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                                                 style="width: 38px; height: 38px; background-color: #eef2ff; color: #4f46e5; font-size: 0.85rem;">
+                                                @initials
+                                            </div>
+                                            <div>
+                                                <strong class="text-dark d-block">@(string.IsNullOrWhiteSpace(empName) ? "Unknown Employee" : empName)</strong>
+                                                <span class="text-muted fs-8">@entry.Employee?.Email</span>
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td>@entry.ClockInUtc.ToString("HH:mm:ss")</td>
-                                    <td>@(entry.ClockOutUtc?.ToString("HH:mm:ss") ?? "-")</td>
-                                    <td>@entry.TotalBreakMinutes mins</td>
-                                    <td><strong>@hours h @mins m</strong></td>
-                                    <td>
+                                    <td class="py-3 font-monospace text-secondary small">
+                                        <i class="bi bi-box-arrow-in-right me-1 text-muted"></i>
+                                        @entry.ClockInUtc.ToString("HH:mm:ss")
+                                    </td>
+                                    <td class="py-3 font-monospace text-secondary small">
+                                        <i class="bi bi-broadcast me-1 text-muted"></i>
+                                        @(entry.ClockOutUtc?.ToString("HH:mm:ss") ?? "-")
+                                    </td>
+                                    <td class="py-3 text-secondary small">
+                                        <span class="badge bg-light text-dark border font-monospace">
+                                            @entry.TotalBreakMinutes min
+                                        </span>
+                                    </td>
+                                    <td class="py-3">
+                                        <strong class="text-dark">@hours h @mins m</strong>
+                                    </td>
+                                    <td class="pe-4 py-3 text-end">
                                         @if (entry.ClockOutUtc.HasValue)
                                         {
-                                            <span class="badge bg-warning text-dark px-3 py-2">⏸️ On Break</span>
+                                            <span class="badge rounded-pill px-3 py-2 fw-medium" style="background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a;">
+                                                <i class="bi bi-pause-fill me-1"></i> On Break
+                                            </span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-success px-3 py-2">▶️ Active at Work</span>
+                                            <span class="badge rounded-pill px-3 py-2 fw-medium" style="background-color: #d1fae5; color: #047857; border: 1px solid #a7f3d0;">
+                                                <i class="bi bi-play-fill me-1"></i> Active at Work
+                                            </span>
                                         }
                                     </td>
                                 </tr>
@@ -114,12 +212,31 @@
     </div>
 </div>
 
+<style>
+    .card-hover {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+        .card-hover:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.15) !important;
+        }
+
+    .fs-8 {
+        font-size: 0.75rem;
+    }
+
+    .fs-9 {
+        font-size: 0.5rem;
+    }
+</style>
+
 @code {
     private List<TimeEntry> todayEntries = new();
     private int presentEmployeesCount;
     private int workingEmployeesCount;
     private int onBreakEmployeesCount;
-    private string totalHoursToday = "0";
+    private string totalHoursToday = "0.0";
 
     private PeriodicTimer? _timer;
     private CancellationTokenSource _cts = new();

@@ -1,0 +1,149 @@
+﻿@page "/roles/edit"
+@using Microsoft.EntityFrameworkCore
+@using Chronus.Models.MainModels
+@inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Edit Role | Chronus</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <!-- Header Navigare -->
+            <div class="mb-3">
+                <a href="/roles" class="text-decoration-none text-muted small">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Roles List
+                </a>
+            </div>
+
+            <!-- Card Principal -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom-0">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning">
+                            <i class="bi bi-pencil-square fs-4"></i>
+                        </div>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Edit Role</h4>
+                            <p class="text-muted small mb-0">Update role name and system permissions description.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (Role is null)
+                    {
+                        <div class="d-flex justify-content-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="Role" OnValidSubmit="UpdateRole">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="alert alert-danger p-2 mb-3 small" role="alert" />
+
+                            <!-- Name Input -->
+                            <div class="mb-3">
+                                <label for="name" class="form-label fw-semibold">Role Name <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-tag text-muted"></i></span>
+                                    <InputText id="name" @bind-Value="Role.Name" class="form-control border-start-0 ps-0" placeholder="e.g. Team Lead, HR Manager" />
+                                </div>
+                                <ValidationMessage For="() => Role.Name" class="text-danger small mt-1" />
+                            </div>
+
+                            <!-- Description Input -->
+                            <div class="mb-4">
+                                <label for="description" class="form-label fw-semibold">Description</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-card-text text-muted"></i></span>
+                                    <InputText id="description" @bind-Value="Role.Description" class="form-control border-start-0 ps-0" placeholder="Short summary of access rights..." />
+                                </div>
+                                <ValidationMessage For="() => Role.Description" class="text-danger small mt-1" />
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                                <a href="/roles" class="btn btn-light px-4">Cancel</a>
+                                <button type="submit" class="btn btn-warning px-4 d-flex align-items-center gap-2" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        <span>Saving Changes...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-check-lg"></i>
+                                        <span>Update Role</span>
+                                    }
+                                </button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private Guid Id { get; set; }
+
+    private Role? Role { get; set; }
+    private bool isSubmitting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Role = await context.Roles.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (Role is null)
+        {
+            NavigationManager.NavigateTo("/roles");
+        }
+    }
+
+    private async Task UpdateRole()
+    {
+        if (Role is null || isSubmitting) return;
+        isSubmitting = true;
+
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            context.Attach(Role).State = EntityState.Modified;
+
+            try
+            {
+                await context.SaveChangesAsync();
+                NavigationManager.NavigateTo("/roles");
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!await RoleExistsAsync(Role.Id))
+                {
+                    NavigationManager.NavigateTo("/roles");
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task<bool> RoleExistsAsync(Guid id)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        return await context.Roles.AnyAsync(e => e.Id == id);
+    }
+}

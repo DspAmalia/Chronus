@@ -11,6 +11,8 @@ namespace Chronus.Data
         public DbSet<UserDevice> UserDevices => Set<UserDevice>();
         public DbSet<RawAuditEvent> RawAuditEvents => Set<RawAuditEvent>();
         public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+        public DbSet<Department> Departments { get; set; }
+        public DbSet<Role> Roles { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -33,6 +35,24 @@ namespace Chronus.Data
                 b.HasKey(t => t.Id);
                 b.HasIndex(t => new { t.EmployeeId, t.Date }).IsUnique();
                 b.Property(t => t.ConfidenceScore).HasPrecision(3, 2);
+            });
+
+            modelBuilder.Entity<Employee>(b =>
+            {
+                b.HasKey(e => e.Id);
+                b.HasIndex(e => e.Email).IsUnique();
+
+                // Relație cu Department (opțională, SetNull la ștergere)
+                b.HasOne(e => e.Department)
+                 .WithMany(d => d.Employees)
+                 .HasForeignKey(e => e.DepartmentId)
+                 .OnDelete(DeleteBehavior.SetNull);
+
+                // Relație cu Role (opțională, SetNull la ștergere)
+                b.HasOne(e => e.Role)
+                 .WithMany(r => r.Employees)
+                 .HasForeignKey(e => e.RoleId)
+                 .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }

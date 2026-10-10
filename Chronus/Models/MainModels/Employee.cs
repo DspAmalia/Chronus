@@ -31,5 +31,13 @@ namespace Chronus.Models.MainModels
         public ICollection<UserDevice> Devices { get; set; } = new List<UserDevice>();
         public ICollection<RawAuditEvent> RawEvents { get; set; } = new List<RawAuditEvent>();
         public ICollection<TimeEntry> TimeEntries { get; set; } = new List<TimeEntry>();
+
+        [ForeignKey("Department")]
+        public Guid? DepartmentId { get; set; }
+        public Department? Department { get; set; }
+
+        [ForeignKey("Role")]
+        public Guid? RoleId { get; set; }
+        public Role? Role { get; set; }
     }
 }
