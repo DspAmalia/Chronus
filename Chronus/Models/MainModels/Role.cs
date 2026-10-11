@@ -1,9 +1,8 @@
 ﻿namespace Chronus.Models.MainModels;
+using Microsoft.AspNetCore.Identity;
 
-public class Role
+public class Role: IdentityRole<Guid>
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public string Name { get; set; } = string.Empty; // ex: Admin, Employee, HR, Team Lead
     public string? Description { get; set; }
 
     // Relatie One-to-Many cu Employee

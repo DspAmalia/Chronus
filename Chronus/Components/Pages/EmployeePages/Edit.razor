@@ -1,0 +1,262 @@
+﻿@page "/employees/edit"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Chronus.Models.MainModels
+@inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
+@inject UserManager<Employee> UserManager
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Chronus - Edit Employee</PageTitle>
+
+<div class="container-fluid mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <!-- Header Navigare -->
+            <div class="mb-3">
+                <a href="/employees" class="text-decoration-none text-muted small">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Employees List
+                </a>
+            </div>
+
+            <!-- Card Principal -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white py-3 border-bottom-0">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle p-3 me-3 d-flex align-items-center justify-content-center"
+                             style="background-color: #fef3c7; color: #d97706; width: 48px; height: 48px;">
+                            <i class="bi bi-pencil-square fs-4"></i>
+                        </div>
+                        <div>
+                            <h4 class="mb-0 fw-bold text-dark">Edit Employee Profile</h4>
+                            <p class="text-muted small mb-0">Update employee credentials, department assignment, and work targets.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger p-2 mb-3 small" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+
+                    @if (Employee is null)
+                    {
+                        <div class="d-flex justify-content-center py-5">
+                            <div class="spinner-border text-indigo" role="status" style="color: #4f46e5;">
+                                <span class="visually-hidden">Loading employee...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="Employee" OnValidSubmit="UpdateEmployee">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="alert alert-danger p-2 mb-3 small" role="alert" />
+
+                            <div class="row">
+                                <!-- First Name -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="firstname" class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                                        <InputText id="firstname" @bind-Value="Employee.FirstName" class="form-control border-start-0 ps-0 shadow-none" placeholder="First Name" />
+                                    </div>
+                                    <ValidationMessage For="() => Employee.FirstName" class="text-danger small mt-1" />
+                                </div>
+
+                                <!-- Last Name -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="lastname" class="form-label fw-semibold">Last Name <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
+                                        <InputText id="lastname" @bind-Value="Employee.LastName" class="form-control border-start-0 ps-0 shadow-none" placeholder="Last Name" />
+                                    </div>
+                                    <ValidationMessage For="() => Employee.LastName" class="text-danger small mt-1" />
+                                </div>
+                            </div>
+
+                            <!-- Email -->
+                            <div class="mb-3">
+                                <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                                    <InputText id="email" @bind-Value="Employee.Email" class="form-control border-start-0 ps-0 shadow-none" placeholder="email@chronus.com" />
+                                </div>
+                                <ValidationMessage For="() => Employee.Email" class="text-danger small mt-1" />
+                            </div>
+
+                            <div class="row">
+                                <!-- Department Dropdown -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="departmentid" class="form-label fw-semibold">Department</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-building"></i></span>
+                                        <InputSelect id="departmentid" @bind-Value="departmentIdString" class="form-select border-start-0 ps-0 shadow-none">
+                                            <option value="">-- Unassigned --</option>
+                                            @foreach (var dept in departments)
+                                            {
+                                                <option value="@dept.Id.ToString()">@dept.Name</option>
+                                            }
+                                        </InputSelect>
+                                    </div>
+                                </div>
+
+                                <!-- Role Dropdown -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="roleid" class="form-label fw-semibold">Role</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-lock"></i></span>
+                                        <InputSelect id="roleid" @bind-Value="roleIdString" class="form-select border-start-0 ps-0 shadow-none">
+                                            <option value="">-- No Role Assigned --</option>
+                                            @foreach (var role in roles)
+                                            {
+                                                <option value="@role.Id.ToString()">@role.Name</option>
+                                            }
+                                        </InputSelect>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <!-- Daily Target Minutes -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="dailytargetminutes" class="form-label fw-semibold">Daily Target (Minutes)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-clock"></i></span>
+                                        <InputNumber id="dailytargetminutes" @bind-Value="Employee.DailyTargetMinutes" class="form-control border-start-0 ps-0 shadow-none" />
+                                    </div>
+                                    <ValidationMessage For="() => Employee.DailyTargetMinutes" class="text-danger small mt-1" />
+                                </div>
+
+                                <!-- Status Switch -->
+                                <div class="col-md-6 mb-3 d-flex align-items-center pt-4">
+                                    <div class="form-check form-switch ps-5">
+                                        <InputCheckbox id="isactive" @bind-Value="Employee.IsActive" class="form-check-input" role="switch" style="width: 2.5em; height: 1.25em; cursor: pointer;" />
+                                        <label class="form-check-label fw-semibold ms-2" for="isactive">Active Account</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-3">
+                                <a href="/employees" class="btn btn-light border px-4">Cancel</a>
+                                <button type="submit" class="btn btn-warning px-4 d-flex align-items-center gap-2 text-dark fw-medium" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        <span>Saving...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-check-lg"></i>
+                                        <span>Update Employee</span>
+                                    }
+                                </button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    private Guid Id { get; set; }
+
+    private Employee? Employee { get; set; }
+    private List<Department> departments = new();
+    private List<Role> roles = new();
+    private bool isSubmitting = false;
+    private string? errorMessage;
+
+    private string departmentIdString
+    {
+        get => Employee?.DepartmentId == null || Employee.DepartmentId == Guid.Empty ? string.Empty : Employee.DepartmentId.ToString()!;
+        set
+        {
+            if (Employee != null)
+            {
+                Employee.DepartmentId = string.IsNullOrEmpty(value) ? null : Guid.Parse(value);
+            }
+        }
+    }
+
+    private string roleIdString
+    {
+        get => Employee?.RoleId == null || Employee.RoleId == Guid.Empty ? string.Empty : Employee.RoleId.ToString()!;
+        set
+        {
+            if (Employee != null)
+            {
+                Employee.RoleId = string.IsNullOrEmpty(value) ? null : Guid.Parse(value);
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        departments = await context.Departments.ToListAsync();
+        roles = await context.Roles.ToListAsync();
+
+        Employee = await context.Employees.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (Employee is null)
+        {
+            NavigationManager.NavigateTo("/employees");
+        }
+    }
+
+    private async Task UpdateEmployee()
+    {
+        if (Employee is null || isSubmitting) return;
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            // Folosim UserManager pentru a actualiza corect datele specifice de Identity (Email, UserName, etc.)
+            var userFromDb = await UserManager.FindByIdAsync(Employee.Id.ToString());
+            if (userFromDb != null)
+            {
+                userFromDb.FirstName = Employee.FirstName;
+                userFromDb.LastName = Employee.LastName;
+                userFromDb.DailyTargetMinutes = Employee.DailyTargetMinutes;
+                userFromDb.IsActive = Employee.IsActive;
+                userFromDb.DepartmentId = Employee.DepartmentId == Guid.Empty ? null : Employee.DepartmentId;
+                userFromDb.RoleId = Employee.RoleId == Guid.Empty ? null : Employee.RoleId;
+
+                // Dacă s-a schimbat emailul, îl actualizăm și sincronizăm și UserName-ul
+                if (userFromDb.Email != Employee.Email)
+                {
+                    userFromDb.Email = Employee.Email;
+                    userFromDb.UserName = Employee.Email;
+                }
+
+                var result = await UserManager.UpdateAsync(userFromDb);
+
+                if (result.Succeeded)
+                {
+                    NavigationManager.NavigateTo("/employees");
+                }
+                else
+                {
+                    errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+                }
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/employees");
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

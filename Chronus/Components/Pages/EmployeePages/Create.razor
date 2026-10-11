@@ -1,0 +1,232 @@
+﻿@page "/employees/create"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Chronus.Models.MainModels
+@inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
+@inject UserManager<Employee> UserManager
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Chronus - Create Employee</PageTitle>
+
+<div class="container-fluid mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <!-- Header Navigare -->
+            <div class="mb-3">
+                <a href="/employees" class="text-decoration-none text-muted small">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Employees List
+                </a>
+            </div>
+
+            <!-- Card Principal -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white py-3 border-bottom-0">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle p-3 me-3 d-flex align-items-center justify-content-center"
+                             style="background-color: #eef2ff; color: #4f46e5; width: 48px; height: 48px;">
+                            <i class="bi bi-person-plus-fill fs-4"></i>
+                        </div>
+                        <div>
+                            <h4 class="mb-0 fw-bold text-dark">Register New Employee</h4>
+                            <p class="text-muted small mb-0">Add team personnel, assign organizational roles, and setup target hours.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger p-2 mb-3 small" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+
+                    <EditForm Model="Employee" OnValidSubmit="AddEmployee">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="alert alert-danger p-2 mb-3 small" role="alert" />
+
+                        <div class="row">
+                            <!-- First Name -->
+                            <div class="col-md-6 mb-3">
+                                <label for="firstname" class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                                    <InputText id="firstname" @bind-Value="Employee.FirstName" class="form-control border-start-0 ps-0 shadow-none" placeholder="e.g. John" />
+                                </div>
+                                <ValidationMessage For="() => Employee.FirstName" class="text-danger small mt-1" />
+                            </div>
+
+                            <!-- Last Name -->
+                            <div class="col-md-6 mb-3">
+                                <label for="lastname" class="form-label fw-semibold">Last Name <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
+                                    <InputText id="lastname" @bind-Value="Employee.LastName" class="form-control border-start-0 ps-0 shadow-none" placeholder="e.g. Doe" />
+                                </div>
+                                <ValidationMessage For="() => Employee.LastName" class="text-danger small mt-1" />
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                                <InputText id="email" @bind-Value="Employee.Email" class="form-control border-start-0 ps-0 shadow-none" placeholder="john.doe@chronus.com" />
+                            </div>
+                            <ValidationMessage For="() => Employee.Email" class="text-danger small mt-1" />
+                        </div>
+
+                        <!-- Password -->
+                        <div class="mb-3">
+                            <label for="password" class="form-label fw-semibold">Initial Password <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock"></i></span>
+                                <InputText id="password" type="password" @bind-Value="password" class="form-control border-start-0 ps-0 shadow-none" placeholder="••••••••" />
+                            </div>
+                            @if (string.IsNullOrEmpty(password) && isSubmittingAttempted)
+                            {
+                                <div class="text-danger small mt-1">Password is required.</div>
+                            }
+                        </div>
+
+                        <div class="row">
+                            <!-- Department Dropdown -->
+                            <div class="col-md-6 mb-3">
+                                <label for="departmentid" class="form-label fw-semibold">Department</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-building"></i></span>
+                                    <InputSelect id="departmentid" @bind-Value="Employee.DepartmentId" class="form-select border-start-0 ps-0 shadow-none">
+                                        <option value="">-- Select Department --</option>
+                                        @foreach (var dept in departments)
+                                        {
+                                            <option value="@dept.Id">@dept.Name</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <ValidationMessage For="() => Employee.DepartmentId" class="text-danger small mt-1" />
+                            </div>
+
+                            <!-- Role Dropdown -->
+                            <div class="col-md-6 mb-3">
+                                <label for="roleid" class="form-label fw-semibold">Role</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-lock"></i></span>
+                                    <InputSelect id="roleid" @bind-Value="Employee.RoleId" class="form-select border-start-0 ps-0 shadow-none">
+                                        <option value="">-- Select Role --</option>
+                                        @foreach (var role in roles)
+                                        {
+                                            <option value="@role.Id">@role.Name</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <ValidationMessage For="() => Employee.RoleId" class="text-danger small mt-1" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Daily Target Minutes -->
+                            <div class="col-md-6 mb-3">
+                                <label for="dailytargetminutes" class="form-label fw-semibold">Daily Target (Minutes)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-clock"></i></span>
+                                    <InputNumber id="dailytargetminutes" @bind-Value="Employee.DailyTargetMinutes" class="form-control border-start-0 ps-0 shadow-none" />
+                                </div>
+                                <ValidationMessage For="() => Employee.DailyTargetMinutes" class="text-danger small mt-1" />
+                            </div>
+
+                            <!-- Status Checkbox -->
+                            <div class="col-md-6 mb-3 d-flex align-items-center pt-4">
+                                <div class="form-check form-switch ps-5">
+                                    <InputCheckbox id="isactive" @bind-Value="Employee.IsActive" class="form-check-input" role="switch" style="width: 2.5em; height: 1.25em; cursor: pointer;" />
+                                    <label class="form-check-label fw-semibold ms-2" for="isactive">Active Employee</label>
+                                </div>
+                                <ValidationMessage For="() => Employee.IsActive" class="text-danger small mt-1" />
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-3">
+                            <a href="/employees" class="btn btn-light border px-4">Cancel</a>
+                            <button type="submit" class="btn text-white px-4 d-flex align-items-center gap-2" style="background-color: #4f46e5; border: none;" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    <span>Saving...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>Save Employee</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Employee Employee { get; set; } = new()
+        {
+            IsActive = true,
+            DailyTargetMinutes = 480,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+    private string password = string.Empty;
+    private string? errorMessage;
+    private bool isSubmitting = false;
+    private bool isSubmittingAttempted = false;
+
+    private List<Department> departments = new();
+    private List<Role> roles = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        departments = await context.Departments.ToListAsync();
+        roles = await context.Roles.ToListAsync();
+    }
+
+    private async Task AddEmployee()
+    {
+        isSubmittingAttempted = true;
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please provide an initial password for the employee.";
+            return;
+        }
+
+        if (isSubmitting) return;
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            // Setăm automat UserName la fel ca Email-ul pentru a respecta standardul Identity
+            Employee.UserName = Employee.Email;
+            Employee.CreatedAtUtc = DateTime.UtcNow;
+            Employee.EmailConfirmed = true; // Opțional: setat direct true pentru a evita blocarea la logare
+
+            // Creăm utilizatorul prin UserManager (criptează parola și populează tabelele de securitate)
+            var result = await UserManager.CreateAsync(Employee, password);
+
+            if (result.Succeeded)
+            {
+                NavigationManager.NavigateTo("/employees");
+            }
+            else
+            {
+                errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

@@ -1,0 +1,75 @@
+﻿@page "/employees/login"
+@inject NavigationManager NavigationManager
+
+<PageTitle>Chronus - Sign In</PageTitle>
+
+<div class="container-fluid vh-100 d-flex align-items-center justify-content-center" style="background-color: #f8fafc;">
+    <div class="col-md-5 col-lg-4">
+        <!-- Brand Header -->
+        <div class="text-center mb-4">
+            <div class="brand-logo rounded-4 d-inline-flex align-items-center justify-content-center text-white shadow-sm mb-3" style="width: 56px; height: 56px; background: linear-gradient(135deg, #4f46e5, #6366f1);">
+                <i class="bi bi-clock-fill fs-3"></i>
+            </div>
+            <h3 class="fw-bold text-dark">Welcome to Chronus</h3>
+            <p class="text-muted small">Sign in to your enterprise suite account</p>
+        </div>
+
+        <!-- Card Login -->
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger p-2 small mb-3">
+                        @errorMessage
+                    </div>
+                }
+
+                <!-- Folosim un formular HTML clasic legat la endpoint-ul nostru -->
+                <form method="post" action="/api/auth/login">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Email Address</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                            <input type="email" name="Email" class="form-control border-start-0 ps-0 shadow-none" placeholder="name@chronus.com" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold small">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock"></i></span>
+                            <input type="password" name="Password" class="form-control border-start-0 ps-0 shadow-none" placeholder="••••••••" required />
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn text-center text-white w-100 py-2.5 fw-medium rounded-3 shadow-sm" style="background-color: #4f46e5; border: none;">
+                        <span>Sign In</span>
+                    </button>
+                </form>
+
+                <div class="text-center mt-3">
+                    <hr class="text-muted" />
+                    <a href="/api/auth/external-login?provider=Google" class="btn btn-outline-dark w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-google"></i>
+                        <span>Sign in with Google</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? errorMessageQuery { get; set; }
+
+    private string? errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(errorMessageQuery))
+        {
+            errorMessage = "Invalid email or password.";
+        }
+    }
+}

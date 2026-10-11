@@ -1,8 +1,12 @@
 ﻿@page "/clocking"
 @using Chronus.Data
 @using Chronus.Models.MainModels
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ChronusDbContext> DbFactory
+@using Microsoft.AspNetCore.Identity
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<Employee> UserManager
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
@@ -24,6 +28,12 @@
         </div>
 
         <div class="d-flex align-items-center gap-2">
+            @if (currentEmployee != null)
+            {
+                <span class="badge bg-indigo-subtle text-indigo border border-indigo-subtle px-3 py-2 fw-medium" style="background-color: #eef2ff; color: #4f46e5; border-color: #c7d2fe !important;">
+                    <i class="bi bi-person-fill me-1"></i> Logged in as: @currentEmployee.FirstName @currentEmployee.LastName
+                </span>
+            }
             <button class="btn btn-light border px-3 py-2 d-flex align-items-center gap-2 shadow-xs fw-medium rounded-3" @onclick="LoadDataAsync">
                 <i class="bi bi-arrow-clockwise text-indigo" style="color: #4f46e5;"></i>
                 <span>Refresh Log</span>
@@ -214,13 +224,31 @@
 
     private PeriodicTimer? _timer;
     private CancellationTokenSource _cts = new();
+    private Employee? currentEmployee;
 
     protected override async Task OnInitializedAsync()
     {
+        await ResolveCurrentEmployeeAsync();
         await LoadDataAsync();
 
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         _ = PollDatabaseAsync();
+    }
+
+    private async Task ResolveCurrentEmployeeAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            var email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? user.Identity.Name;
+            if (!string.IsNullOrEmpty(email))
+            {
+                using var db = await DbFactory.CreateDbContextAsync();
+                currentEmployee = await db.Employees.FirstOrDefaultAsync(e => e.Email == email);
+            }
+        }
     }
 
     private async Task PollDatabaseAsync()
@@ -240,8 +268,17 @@
     {
         using var db = await DbFactory.CreateDbContextAsync();
 
-        timeEntries = await db.TimeEntries
+        var query = db.TimeEntries
             .Include(t => t.Employee)
+            .AsQueryable();
+
+        // Dacă avem un angajat logat identificat, îi afișăm doar pontajele lui!
+        if (currentEmployee != null)
+        {
+            query = query.Where(t => t.EmployeeId == currentEmployee.Id);
+        }
+
+        timeEntries = await query
             .OrderByDescending(t => t.Date)
             .ThenByDescending(t => t.ClockInUtc)
             .ToListAsync();
@@ -253,13 +290,17 @@
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-                return timeEntries;
+            var entries = timeEntries;
 
-            return timeEntries.Where(t =>
-                (t.Employee != null && (t.Employee.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                                       t.Employee.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                                       t.Employee.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))));
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                entries = entries.Where(t =>
+                    (t.Employee != null && (t.Employee.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                           t.Employee.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                           t.Employee.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))).ToList();
+            }
+
+            return entries;
         }
     }
 

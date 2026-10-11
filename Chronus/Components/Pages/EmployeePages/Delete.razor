@@ -1,0 +1,161 @@
+﻿@page "/employees/delete"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using Chronus.Models.MainModels
+@inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
+@inject UserManager<Employee> UserManager
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Chronus - Delete Employee</PageTitle>
+
+<div class="container-fluid mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <!-- Header Navigare -->
+            <div class="mb-3">
+                <a href="/employees" class="text-decoration-none text-muted small">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Employees List
+                </a>
+            </div>
+
+            <!-- Card Confirmare Ștergere -->
+            <div class="card border-danger shadow-sm rounded-4">
+                <div class="card-header bg-danger text-white py-3 border-bottom-0">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Delete Employee</h4>
+                            <p class="mb-0 small opacity-75">Are you sure you want to permanently remove this employee record?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger p-2 mb-3 small" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+
+                    @if (employee is null)
+                    {
+                        <div class="d-flex justify-content-center py-4">
+                            <div class="spinner-border text-danger" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning border-0 d-flex align-items-center mb-4" role="alert">
+                            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                            <div class="small">
+                                Deleting this employee will also clear their related historical attendance and clocking logs.
+                            </div>
+                        </div>
+
+                        <!-- Detalii Angajat -->
+                        <div class="bg-light p-3 rounded-3 mb-4 border">
+                            <div class="row mb-2">
+                                <div class="col-sm-4 text-muted fw-semibold">Full Name:</div>
+                                <div class="col-sm-8 fw-bold text-dark">@employee.FirstName @employee.LastName</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-sm-4 text-muted fw-semibold">Email:</div>
+                                <div class="col-sm-8 text-secondary font-monospace small">@employee.Email</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-sm-4 text-muted fw-semibold">Daily Target:</div>
+                                <div class="col-sm-8 text-dark">@employee.DailyTargetMinutes minutes</div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-sm-4 text-muted fw-semibold">Status:</div>
+                                <div class="col-sm-8">
+                                    <span class="badge @(employee.IsActive ? "bg-success-subtle text-success border border-success-subtle" : "bg-danger-subtle text-danger border border-danger-subtle") rounded-pill px-2.5 py-1">
+                                        @(employee.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-4 text-muted fw-semibold">Registered:</div>
+                                <div class="col-sm-8 text-secondary font-monospace small">@employee.CreatedAtUtc.ToString("dd MMM yyyy HH:mm")</div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                            <a href="/employees" class="btn btn-light border px-4">Cancel</a>
+                            <button type="button" @onclick="DeleteEmployee" class="btn btn-danger px-4 d-flex align-items-center gap-2" disabled="@isDeleting">
+                                @if (isDeleting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    <span>Deleting...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-trash-fill"></i>
+                                    <span>Confirm Delete</span>
+                                }
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Employee? employee;
+    private bool isDeleting = false;
+    private string? errorMessage;
+
+    [SupplyParameterFromQuery]
+    private Guid Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        employee = await context.Employees.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (employee is null)
+        {
+            NavigationManager.NavigateTo("/employees");
+        }
+    }
+
+    private async Task DeleteEmployee()
+    {
+        if (employee is null || isDeleting) return;
+        isDeleting = true;
+        errorMessage = null;
+
+        try
+        {
+            // Preluăm instanța userului gestionată de UserManager
+            var userToDelete = await UserManager.FindByIdAsync(employee.Id.ToString());
+            if (userToDelete != null)
+            {
+                var result = await UserManager.DeleteAsync(userToDelete);
+                if (result.Succeeded)
+                {
+                    NavigationManager.NavigateTo("/employees");
+                }
+                else
+                {
+                    errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+                }
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/employees");
+            }
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+}

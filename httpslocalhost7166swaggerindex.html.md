@@ -28,3 +28,20 @@ Pentru a testa cand iese din pauza:
 
 }
 
+
+
+Amalia2004.
+
+
+
+Google
+
+ClientID: 677355641668-2ijl0blsg3l3ub9fbsu02vd3075h0lrh.apps.googleusercontent.com
+
+Secret: GOCSPX-lIr-7kNEFEH5M8Xm5rV\_xsG4LeRD
+
+
+
+1. pag logout
+2. sa ia in calcul userul logat la pontaj
+

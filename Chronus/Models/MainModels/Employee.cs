@@ -1,12 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Identity;
 
 namespace Chronus.Models.MainModels
 {
-    public class Employee
+    public class Employee : IdentityUser<Guid>
     {
-        [Key]
-        public Guid Id { get; set; } = Guid.NewGuid();
+        // Notă: Id-ul și Email-ul sunt moștenite automat din IdentityUser<Guid>
 
         [Required]
         [MaxLength(100)]
@@ -15,11 +15,6 @@ namespace Chronus.Models.MainModels
         [Required]
         [MaxLength(100)]
         public string LastName { get; set; } = string.Empty;
-
-        [Required]
-        [EmailAddress]
-        [MaxLength(150)]
-        public string Email { get; set; } = string.Empty;
 
         public int DailyTargetMinutes { get; set; } = 480; // 8 ore de muncă
 
