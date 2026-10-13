@@ -1,11 +1,13 @@
-﻿@page "/"
-@page "/dashboard"
+﻿@page "/dashboard"
 @using Chronus.Data
 @using Chronus.Models.MainModels
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
 @inject IDbContextFactory<ChronusDbContext> DbFactory
 @implements IAsyncDisposable
 @rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Manager,Admin")]
 
 <PageTitle>Dashboard | Chronus</PageTitle>
 
@@ -33,7 +35,7 @@
         </div>
     </div>
 
-    <!-- KPI Cards (Refăcute pentru contrast și lizibilitate) -->
+    <!-- KPI Cards -->
     <div class="row g-3 mb-4">
         <!-- Present Today -->
         <div class="col-12 col-sm-6 col-xl-3">
@@ -114,14 +116,27 @@
 
     <!-- Live Team Status Table -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-        <div class="card-header bg-white py-3 border-bottom border-light d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-activity" style="color: #4f46e5;"></i>
-                <h5 class="fw-bold text-dark mb-0">Team Status (Today)</h5>
-            </div>
-            <div class="d-flex align-items-center gap-2 text-muted small">
-                <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
-                <span>Auto-refreshing every 5s</span>
+        <div class="card-header bg-white py-3 border-bottom border-light">
+            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
+                <!-- Search bar în stânga -->
+                <div class="col-12 col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0 text-muted ps-3">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text"
+                               class="form-control border-start-0 bg-transparent py-2 shadow-none"
+                               placeholder="Search employee name or email..."
+                               @bind="searchTerm"
+                               @bind:event="oninput" />
+                    </div>
+                </div>
+
+                <!-- Textul cu auto-refresh în dreapta -->
+                <div class="d-flex align-items-center gap-2 text-muted small ms-md-auto">
+                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
+                    <span>Auto-refreshing every 5s</span>
+                </div>
             </div>
         </div>
 
@@ -139,18 +154,18 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @if (todayEntries.Count == 0)
+                        @if (!FilteredEntries.Any())
                         {
                             <tr>
                                 <td colspan="6" class="text-center py-5 text-muted">
                                     <i class="bi bi-calendar-x display-6 d-block mb-2 text-muted opacity-50"></i>
-                                    <span>No attendance records logged for today.</span>
+                                    <span>No attendance records matching your criteria for today.</span>
                                 </td>
                             </tr>
                         }
                         else
                         {
-                            @foreach (var entry in todayEntries)
+                            @foreach (var entry in FilteredEntries)
                             {
                                 var hours = entry.NetWorkMinutes / 60;
                                 var mins = entry.NetWorkMinutes % 60;
@@ -233,6 +248,7 @@
 
 @code {
     private List<TimeEntry> todayEntries = new();
+    private string searchTerm = string.Empty;
     private int presentEmployeesCount;
     private int workingEmployeesCount;
     private int onBreakEmployeesCount;
@@ -278,6 +294,24 @@
 
         var totalMinutes = todayEntries.Sum(t => t.NetWorkMinutes);
         totalHoursToday = (totalMinutes / 60.0).ToString("F1");
+    }
+
+    private IEnumerable<TimeEntry> FilteredEntries
+    {
+        get
+        {
+            var entries = todayEntries;
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                entries = entries.Where(t =>
+                    (t.Employee != null && (t.Employee.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                            t.Employee.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                            t.Employee.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))).ToList();
+            }
+
+            return entries;
+        }
     }
 
     public async ValueTask DisposeAsync()

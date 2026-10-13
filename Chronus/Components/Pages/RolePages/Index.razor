@@ -2,8 +2,12 @@
 @using Microsoft.EntityFrameworkCore
 @using Chronus.Models.MainModels
 @using Chronus.Data
+@using Microsoft.AspNetCore.Authorization
+
 @inject IDbContextFactory<Chronus.Data.ChronusDbContext> DbFactory
 @rendermode InteractiveServer
+
+@attribute [Authorize(Roles = "Manager,Admin")]
 
 <PageTitle>Roles Management | Chronus</PageTitle>
 

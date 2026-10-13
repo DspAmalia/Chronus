@@ -1,6 +1,6 @@
 ﻿<div class="sidebar-header px-4 py-3 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-10">
     <a class="d-flex align-items-center gap-3 text-decoration-none" href="">
-        <div class="brand-logo rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm">
+        <div class="brand-logo rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm" style="width: 40px; height: 40px; background: linear-gradient(135deg, #4f46e5, #6366f1);">
             <i class="bi bi-clock-fill fs-5"></i>
         </div>
         <div class="d-flex flex-column">
@@ -10,23 +10,25 @@
     </a>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="flex-column px-3 py-3">
-        <!-- Section: Overview -->
-        <div class="sidebar-heading px-3 text-uppercase fw-bold text-muted fs-8 mb-2">
-            Overview
-        </div>
+        <!-- Section: Overview (Vizibil doar pentru Manager/Admin) -->
+        <AuthorizeView Roles="Manager,Admin">
+            <Authorized>
+                <div class="sidebar-heading px-3 text-uppercase fw-bold text-muted fs-8 mb-2">
+                    Overview
+                </div>
 
-        <div class="nav-item mb-1">
-            <NavLink class="nav-link px-3 rounded-3" href="" Match="NavLinkMatch.All">
-                <i class="bi bi-speedometer2 me-3 fs-5"></i>
-                <span>Dashboard</span>
-            </NavLink>
-        </div>
+                <div class="nav-item mb-1">
+                    <NavLink class="nav-link px-3 rounded-3" href="dashboard" Match="NavLinkMatch.All">
+                        <i class="bi bi-speedometer2 me-3 fs-5"></i>
+                        <span>Dashboard</span>
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
-        <!-- Section: Operations -->
+        <!-- Section: Operations / Time & Attendance (Disponibil și pentru Employee) -->
         <div class="sidebar-heading px-3 text-uppercase fw-bold text-muted fs-8 mt-4 mb-2">
             Time & Attendance
         </div>
@@ -38,30 +40,34 @@
             </NavLink>
         </div>
 
-        <!-- Section: Administration -->
-        <div class="sidebar-heading px-3 text-uppercase fw-bold text-muted fs-8 mt-4 mb-2">
-            Administration
-        </div>
+        <!-- Section: Administration (Doar Admin/Manager) -->
+        <AuthorizeView Roles="Manager,Admin">
+            <Authorized>
+                <div class="sidebar-heading px-3 text-uppercase fw-bold text-muted fs-8 mt-4 mb-2">
+                    Administration
+                </div>
 
-        <div class="nav-item mb-1">
-            <NavLink class="nav-link px-3 rounded-3" href="roles">
-                <i class="bi bi-shield-lock me-3 fs-5"></i>
-                <span>Roles & Access</span>
-            </NavLink>
-        </div>
+                <div class="nav-item mb-1">
+                    <NavLink class="nav-link px-3 rounded-3" href="roles">
+                        <i class="bi bi-shield-lock me-3 fs-5"></i>
+                        <span>Roles & Access</span>
+                    </NavLink>
+                </div>
 
-        <div class="nav-item mb-1">
-            <NavLink class="nav-link px-3 rounded-3" href="departments">
-                <i class="bi bi-building me-3 fs-5"></i>
-                <span>Departments</span>
-            </NavLink>
-        </div>
-        
-        <div class="nav-item mb-1">
-            <NavLink class="nav-link px-3 rounded-3" href="employees">
-                <i class="bi bi-person me-3 fs-5"></i>
-                <span>Employees</span>
-            </NavLink>
-        </div>
+                <div class="nav-item mb-1">
+                    <NavLink class="nav-link px-3 rounded-3" href="departments">
+                        <i class="bi bi-building me-3 fs-5"></i>
+                        <span>Departments</span>
+                    </NavLink>
+                </div>
+                
+                <div class="nav-item mb-1">
+                    <NavLink class="nav-link px-3 rounded-3" href="employees">
+                        <i class="bi bi-person me-3 fs-5"></i>
+                        <span>Employees</span>
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
     </nav>
 </div>

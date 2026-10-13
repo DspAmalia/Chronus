@@ -1,14 +1,20 @@
-﻿@page "/clocking"
+﻿@page "/"
+@page "/clocking"
 @using Chronus.Data
 @using Chronus.Models.MainModels
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
-@inject IDbContextFactory<ChronusDbContext> DbFactory
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
+
+@inject IDbContextFactory<ChronusDbContext> DbFactory
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<Employee> UserManager
 @rendermode InteractiveServer
 @implements IAsyncDisposable
+@inject NavigationManager Navigation
+
+@attribute [Authorize]
 
 <PageTitle>Attendance & Clocking | Chronus</PageTitle>
 
@@ -18,11 +24,11 @@
         <div>
             <div class="d-flex align-items-center gap-2">
                 <div class="rounded-3 text-white p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: linear-gradient(135deg, #4f46e5, #6366f1);">
-                    <i class="bi bi-clock-history fs-5"></i>
+                    <i class="bi bi-laptop fs-5"></i>
                 </div>
                 <div>
-                    <h3 class="fw-bold text-dark mb-0">Daily Time Log</h3>
-                    <p class="text-muted small mb-0">Live attendance monitoring, automated confidence scoring, and break calculations.</p>
+                    <h3 class="fw-bold text-dark mb-0">Device & Attendance Management</h3>
+                    <p class="text-muted small mb-0">Link your hardware machine name to your web account for automated clocking.</p>
                 </div>
             </div>
         </div>
@@ -41,11 +47,35 @@
         </div>
     </div>
 
-    <!-- Card Principal cu Filtre & Tabel -->
+    <!-- FORMULARUL APARE DOAR DACĂ DISPOZITIVUL NU ESTE ÎNREGISTRAT -->
+    @if (!isDeviceRegistered)
+    {
+        <div class="row mb-4">
+            <div class="col-12 col-lg-6">
+                <div class="card border-0 shadow-sm rounded-4 p-4" style="background-color: #fffbeb; border: 1px solid #fde68a !important;">
+                    <h5 class="fw-bold text-warning-emphasis mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>Register Current Device</h5>
+                    <p class="text-muted small mb-3">Click the button below to link this PC (`@inputMachineName`) to your web account.</p>
+
+                    @if (!string.IsNullOrEmpty(statusMessage))
+                    {
+                        <div class="alert @statusAlertClass py-2 small mb-3" role="alert">
+                            @statusMessage
+                        </div>
+                    }
+
+                    <button class="btn btn-warning text-dark w-100 py-2 fw-medium rounded-3 shadow-xs" @onclick="RegisterDeviceAsync">
+                        <i class="bi bi-link-45deg me-1"></i> Link Current Device to My Account
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Card Principal cu Tabel -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-        <!-- Toolbar & Search -->
         <div class="card-header bg-white py-3 border-bottom border-light">
-            <div class="row g-3 align-items-center justify-content-between">
+            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
+                <!-- Search bar în stânga -->
                 <div class="col-12 col-md-5">
                     <div class="input-group">
                         <span class="input-group-text bg-transparent border-end-0 text-muted ps-3">
@@ -59,11 +89,10 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-md-auto d-flex align-items-center gap-2">
-                    <div class="d-flex align-items-center gap-2 text-muted small me-2">
-                        <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
-                        <span>Live Syncing</span>
-                    </div>
+                <!-- Textul cu auto-refresh în dreapta -->
+                <div class="d-flex align-items-center gap-2 text-muted small ms-md-auto">
+                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
+                    <span>Auto-refreshing every 5s</span>
                 </div>
             </div>
         </div>
@@ -112,7 +141,6 @@
                                 var scorePercentage = entry.ConfidenceScore * 100;
 
                                 <tr>
-                                    <!-- Angajat -->
                                     <td class="ps-4 py-3">
                                         <div class="d-flex align-items-center gap-3">
                                             <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold"
@@ -125,32 +153,22 @@
                                             </div>
                                         </div>
                                     </td>
-
-                                    <!-- Data -->
                                     <td class="py-3 text-secondary small fw-medium">
                                         <i class="bi bi-calendar-event me-1 text-muted"></i>
                                         @entry.Date.ToString("dd MMM yyyy")
                                     </td>
-
-                                    <!-- Clock In -->
                                     <td class="py-3 font-monospace text-secondary small">
                                         <i class="bi bi-box-arrow-in-right me-1 text-muted"></i>
                                         @entry.ClockInUtc.ToLocalTime().ToString("HH:mm:ss")
                                     </td>
-
-                                    <!-- Timp Lucrat -->
                                     <td class="py-3">
                                         <span class="badge bg-light text-dark border font-monospace px-2 py-1 fs-7">
                                             @hours h @mins m
                                         </span>
                                     </td>
-
-                                    <!-- Pauza -->
                                     <td class="py-3 text-secondary small">
                                         <span class="text-muted">@entry.TotalBreakMinutes mins</span>
                                     </td>
-
-                                    <!-- Scor Incredere -->
                                     <td class="py-3">
                                         <div class="d-flex align-items-center gap-2" style="max-width: 130px;">
                                             <div class="progress flex-grow-1" style="height: 6px;">
@@ -165,8 +183,6 @@
                                             <span class="fw-bold fs-8 text-dark">@scorePercentage.ToString("F0")%</span>
                                         </div>
                                     </td>
-
-                                    <!-- Status Badge -->
                                     <td class="pe-4 py-3 text-end">
                                         @if (entry.ClockOutUtc.HasValue && entry.Status == EntryStatus.InProgress)
                                         {
@@ -226,13 +242,67 @@
     private CancellationTokenSource _cts = new();
     private Employee? currentEmployee;
 
+    private string inputMachineName = Environment.MachineName;
+    private string statusMessage = string.Empty;
+    private string statusAlertClass = "alert-info";
+    private bool isDeviceRegistered = false;
+
     protected override async Task OnInitializedAsync()
     {
         await ResolveCurrentEmployeeAsync();
+
+        // 🔑 Dacă utilizatorul nu este logat, îl trimitem imediat la login!
+        if (currentEmployee == null)
+        {
+            Navigation.NavigateTo("/employees/login", forceLoad: true);
+            return;
+        }
+
+        await CheckDeviceRegistrationAsync();
+        await EnsureTodayTimeEntryExistsAsync();
+
         await LoadDataAsync();
 
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
         _ = PollDatabaseAsync();
+    }
+
+    private async Task CheckDeviceRegistrationAsync()
+    {
+        if (currentEmployee == null) return;
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        isDeviceRegistered = await db.UserDevices
+            .AnyAsync(d => d.MachineName == inputMachineName && d.EmployeeId == currentEmployee.Id);
+    }
+
+    private async Task EnsureTodayTimeEntryExistsAsync()
+    {
+        if (currentEmployee == null) return;
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        bool entryExists = await db.TimeEntries
+            .AnyAsync(t => t.EmployeeId == currentEmployee.Id && t.Date == today);
+
+        if (!entryExists)
+        {
+            var newEntry = new TimeEntry
+                {
+                    Id = Guid.NewGuid(),
+                    EmployeeId = currentEmployee.Id,
+                    Date = today,
+                    ClockInUtc = DateTime.UtcNow,
+                    NetWorkMinutes = 0,
+                    TotalBreakMinutes = 0,
+                    Status = EntryStatus.InProgress,
+                    ConfidenceScore = 1.00m
+                };
+
+            db.TimeEntries.Add(newEntry);
+            await db.SaveChangesAsync();
+        }
     }
 
     private async Task ResolveCurrentEmployeeAsync()
@@ -242,12 +312,64 @@
 
         if (user.Identity != null && user.Identity.IsAuthenticated)
         {
-            var email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? user.Identity.Name;
-            if (!string.IsNullOrEmpty(email))
+            currentEmployee = await UserManager.GetUserAsync(user);
+
+            if (currentEmployee == null)
             {
-                using var db = await DbFactory.CreateDbContextAsync();
-                currentEmployee = await db.Employees.FirstOrDefaultAsync(e => e.Email == email);
+                var identifier = user.Identity.Name ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (!string.IsNullOrEmpty(identifier))
+                {
+                    using var db = await DbFactory.CreateDbContextAsync();
+                    currentEmployee = await db.Employees
+                        .FirstOrDefaultAsync(e => e.Email == identifier || e.UserName == identifier);
+                }
             }
+        }
+    }
+
+    private async Task RegisterDeviceAsync()
+    {
+        if (currentEmployee == null)
+        {
+            statusMessage = "Error: You must be logged in to register a device.";
+            statusAlertClass = "alert-danger";
+            return;
+        }
+
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+
+            var existingDevice = await db.UserDevices
+                .FirstOrDefaultAsync(d => d.MachineName == inputMachineName);
+
+            if (existingDevice != null)
+            {
+                existingDevice.EmployeeId = currentEmployee.Id;
+                existingDevice.LastSeenUtc = DateTime.UtcNow;
+                db.UserDevices.Update(existingDevice);
+            }
+            else
+            {
+                var newDevice = new UserDevice
+                    {
+                        Id = Guid.NewGuid(),
+                        EmployeeId = currentEmployee.Id,
+                        MachineName = inputMachineName,
+                        LastSeenUtc = DateTime.UtcNow
+                    };
+                db.UserDevices.Add(newDevice);
+            }
+
+            await db.SaveChangesAsync();
+
+            // Setăm starea ca înregistrată, ceea ce va ascunde automat cardul galben
+            isDeviceRegistered = true;
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error linking device: {ex.Message}";
+            statusAlertClass = "alert-danger";
         }
     }
 
@@ -257,6 +379,14 @@
         {
             while (await _timer!.WaitForNextTickAsync(_cts.Token))
             {
+                // 🔑 Verificăm la fiecare 3 secunde (în timpul auto-refresh-ului) dacă a expirat sesiunea
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                if (authState.User.Identity == null || !authState.User.Identity.IsAuthenticated)
+                {
+                    Navigation.NavigateTo("/employees/login", forceLoad: true);
+                    break;
+                }
+
                 await LoadDataAsync();
                 await InvokeAsync(StateHasChanged);
             }
@@ -272,7 +402,6 @@
             .Include(t => t.Employee)
             .AsQueryable();
 
-        // Dacă avem un angajat logat identificat, îi afișăm doar pontajele lui!
         if (currentEmployee != null)
         {
             query = query.Where(t => t.EmployeeId == currentEmployee.Id);
@@ -296,8 +425,8 @@
             {
                 entries = entries.Where(t =>
                     (t.Employee != null && (t.Employee.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                                           t.Employee.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                                           t.Employee.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))).ToList();
+                                            t.Employee.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                            t.Employee.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))).ToList();
             }
 
             return entries;

@@ -1,19 +1,44 @@
 ﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<AuthorizeView>
+    <Authorized>
+        <!-- Layout-ul complet cu Sidebar și Top-row (vizibil DOAR când ești logat) -->
+        <div class="page">
+            <div class="sidebar">
+                <NavMenu />
+            </div>
 
-    <main>
-        <div class="top-row px-4">
+            <main>
+                <div class="top-row px-4 d-flex justify-content-end align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
+                             style="width: 35px; height: 35px; background: linear-gradient(135deg, #4f46e5, #6366f1); font-size: 0.85rem;">
+                            <i class="bi bi-person-fill"></i>
+                        </div>
+                        <span class="fw-medium text-dark small">@context.User.Identity?.Name</span>
+
+                        <form action="/api/auth/logout" method="post" class="d-inline ms-2">
+                            <button type="submit" class="btn btn-sm btn-outline-danger border-0">
+                                <i class="bi bi-box-arrow-right"></i> Sign out
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <article class="content px-4">
+                    @Body
+                </article>
+            </main>
         </div>
-
-        <article class="content px-4">
+    </Authorized>
+    <NotAuthorized>
+        <!-- Când NU ești logat, se afișează strict pagina (fără sidebar sau meniuri) -->
+        <main class="w-100 min-vh-100 d-flex flex-column">
             @Body
-        </article>
-    </main>
-</div>
+        </main>
+    </NotAuthorized>
+</AuthorizeView>
 
 <div id="blazor-error-ui">
     An unhandled error has occurred.

@@ -9,18 +9,16 @@ public class WindowsSessionAgent : BackgroundService
     private readonly ILogger<WindowsSessionAgent> _logger;
     private readonly HttpClient _httpClient;
 
-    // Folosim ID-urile de test create în DbInitializer
-    private static readonly Guid EmployeeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid DeviceId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    // Preluăm dinamic datele calculatorului curent
+    private static readonly string MachineName = Environment.MachineName;
+    private static readonly string WindowsUserName = Environment.UserName;
 
-    // Endpoint-ul local din aplicație
-    private const string ApiUrl = "https://localhost:7166/api/events"; // ⚠️ Asigură-te că portul se potrivește cu cel din proiectul tău!
+    private const string ApiUrl = "https://localhost:7166/api/events";
 
     public WindowsSessionAgent(ILogger<WindowsSessionAgent> logger)
     {
         _logger = logger;
 
-        // Ignorăm verificările de certificat SSL pentru localhost în dezvoltare
         var handler = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
@@ -30,15 +28,14 @@ public class WindowsSessionAgent : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("🖥️ Agentul Windows Chronus a pornit și ascultă deblocarea/blocarea ecranului...");
+        _logger.LogInformation("🖥️ Agentul Windows pentru {Machine} a pornit...", MachineName);
 
-        // Ne abonăm la evenimentele de sesiune Windows
         SystemEvents.SessionSwitch += OnSessionSwitch;
 
         stoppingToken.Register(() =>
         {
             SystemEvents.SessionSwitch -= OnSessionSwitch;
-            _logger.LogInformation("🖥️ Agentul Windows Chronus s-a oprit.");
+            _logger.LogInformation("🖥️ Agentul Windows s-a oprit.");
         });
 
         return Task.CompletedTask;
@@ -46,9 +43,6 @@ public class WindowsSessionAgent : BackgroundService
 
     private async void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
     {
-        // Determinăm tipul de eveniment
-        // Type 1 = SessionUnlocked (La lucru)
-        // Type 2 = SessionLocked (În pauză)
         int? eventType = e.Reason switch
         {
             SessionSwitchReason.SessionUnlock => 1,
@@ -60,7 +54,7 @@ public class WindowsSessionAgent : BackgroundService
 
         if (eventType.HasValue)
         {
-            _logger.LogInformation("🔔 Eveniment detectat în Windows: {Reason} (EventType: {Type})", e.Reason, eventType);
+            _logger.LogInformation("🔔 Eveniment Windows detectat: {Reason}", e.Reason);
             await SendEventToApiAsync(eventType.Value);
         }
     }
@@ -71,8 +65,8 @@ public class WindowsSessionAgent : BackgroundService
         {
             var payload = new
             {
-                EmployeeId = EmployeeId,
-                DeviceId = DeviceId,
+                WindowsUserName = WindowsUserName,
+                MachineName = MachineName,
                 Type = eventType
             };
 
@@ -83,11 +77,12 @@ public class WindowsSessionAgent : BackgroundService
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("✅ Eveniment trimis cu succes la API-ul Chronus.");
+                _logger.LogInformation("✅ Eveniment trimis dinamic cu succes pentru mașina: {Machine}", MachineName);
             }
             else
             {
-                _logger.LogWarning("⚠️ Serverul a răspuns cu codul: {Code}", response.StatusCode);
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("⚠️ Serverul a respins evenimentul ({Code}): {Error}", response.StatusCode, errorBody);
             }
         }
         catch (Exception ex)
