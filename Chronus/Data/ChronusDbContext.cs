@@ -14,6 +14,7 @@ namespace Chronus.Data
         public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Role> Roles => Set<Role>();
+        public DbSet<CalendarEvent> CalendarEvent { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
