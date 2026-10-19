@@ -1,0 +1,123 @@
+﻿@page "/checkin"
+@using Chronus.Data
+@using Chronus.Models.MainModels
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ChronusDbContext> DbFactory
+@inject UserManager<Employee> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+
+<div class="container mt-5" style="max-width: 500px;">
+    <div class="card border-0 shadow-lg rounded-4 p-4 text-center bg-white">
+        @if (isLoading)
+        {
+            <div class="spinner-border text-primary mx-auto my-4" role="status"></div>
+            <p class="text-muted">Validating meeting session...</p>
+        }
+        else if (targetEvent == null)
+        {
+            <div class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill fs-1"></i></div>
+            <h4 class="fw-bold text-dark">Invalid Session</h4>
+            <p class="text-muted small">The meeting session linked to this QR code could not be found or has expired.</p>
+        }
+        else if (isAlreadyCheckedIn)
+        {
+            <div class="text-info mb-3"><i class="bi bi-info-circle-fill fs-1"></i></div>
+            <h4 class="fw-bold text-dark">Already Checked In</h4>
+            <p class="text-muted small mb-0">You have already registered your attendance for <strong>@targetEvent.Title</strong>.</p>
+        }
+        else if (isSuccess)
+        {
+            <div class="text-success mb-3"><i class="bi bi-check-circle-fill fs-1"></i></div>
+            <h4 class="fw-bold text-dark">Check-In Successful!</h4>
+            <p class="text-muted small mb-2">Your presence for <strong>@targetEvent.Title</strong> has been officially logged.</p>
+            <div class="badge @(attendanceStatus == "OnTime" ? "bg-success" : "bg-warning text-dark") fs-6 py-2 px-3 mt-2">
+                Status: @attendanceDescription
+            </div>
+        }
+        else
+        {
+            <div class="rounded-circle bg-primary bg-opacity-10 p-3 d-inline-flex mx-auto mb-3 text-primary">
+                <i class="bi bi-qr-code-scan fs-2"></i>
+            </div>
+            <h4 class="fw-bold text-dark">Offline Meeting Check-In</h4>
+            <p class="text-muted small mb-1">Meeting: <strong>@targetEvent.Title</strong></p>
+            <p class="text-secondary small font-monospace">Scheduled Start: @targetEvent.StartTime.ToString("HH:mm")</p>
+
+            <button class="btn btn-success btn-lg rounded-pill w-100 shadow-sm mt-3" @onclick="ConfirmAttendance">
+                <i class="bi bi-check2-circle me-2"></i> Confirm My Attendance
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "sessionId")]
+    public string? SessionId { get; set; }
+
+    private CalendarEvent? targetEvent;
+    private Employee? currentEmployee;
+    private bool isLoading = true;
+    private bool isSuccess = false;
+    private bool isAlreadyCheckedIn = false;
+    private string attendanceStatus = "OnTime";
+    private string attendanceDescription = "Present / On Time";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentEmployee = await UserManager.GetUserAsync(authState.User);
+
+        if (!string.IsNullOrEmpty(SessionId) && Guid.TryParse(SessionId, out var eventGuid) && currentEmployee != null)
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            targetEvent = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == eventGuid);
+
+            // Check if the employee has already checked in to this meeting
+            isAlreadyCheckedIn = await db.MeetingAttendances
+                .AnyAsync(a => a.EventId == eventGuid && a.EmployeeId == currentEmployee.Id);
+        }
+        isLoading = false;
+    }
+
+    private async Task ConfirmAttendance()
+    {
+        if (targetEvent == null || currentEmployee == null) return;
+
+        var scanTimeUtc = DateTime.UtcNow;
+        var startTimeUtc = targetEvent.StartTime.ToUniversalTime();
+
+        // Calculate the difference in minutes (if scanned more than 10 minutes after start, it's "Late")
+        var diffMinutes = (DateTime.Now - targetEvent.StartTime).TotalMinutes;
+
+        if (diffMinutes > 10)
+        {
+            attendanceStatus = "Late";
+            attendanceDescription = $"Late by {Math.Round(diffMinutes)} minutes";
+        }
+        else
+        {
+            attendanceStatus = "OnTime";
+            attendanceDescription = "Present / On Time";
+        }
+
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        var attendance = new MeetingAttendance
+            {
+                EventId = targetEvent.Id,
+                EmployeeId = currentEmployee.Id,
+                CheckedInAtUtc = scanTimeUtc,
+                Status = attendanceStatus
+            };
+
+        db.MeetingAttendances.Add(attendance);
+        await db.SaveChangesAsync();
+
+        isSuccess = true;
+    }
+}

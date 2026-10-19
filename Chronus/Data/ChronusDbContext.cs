@@ -15,6 +15,7 @@ namespace Chronus.Data
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Role> Roles => Set<Role>();
         public DbSet<CalendarEvent> CalendarEvent { get; set; }
+        public DbSet<MeetingAttendance> MeetingAttendances { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -50,6 +51,18 @@ namespace Chronus.Data
                 b.HasIndex(t => new { t.EmployeeId, t.Date }).IsUnique();
                 b.Property(t => t.ConfidenceScore).HasPrecision(3, 2);
             });
+
+            modelBuilder.Entity<MeetingAttendance>()
+                .HasOne(m => m.CalendarEvent)
+                .WithMany() // Sau .WithMany(e => e.MeetingAttendances) dacă adaugi colecția în CalendarEvent
+                .HasForeignKey(m => m.EventId)
+                .OnDelete(DeleteBehavior.NoAction); // Oprește cascade delete pe eveniment
+
+            modelBuilder.Entity<MeetingAttendance>()
+                .HasOne(m => m.Employee)
+                .WithMany()
+                .HasForeignKey(m => m.EmployeeId)
+                .OnDelete(DeleteBehavior.NoAction);
         }
     }
 }

@@ -48,5 +48,7 @@ namespace Chronus.Models.MainModels
 
         [Required]
         public Guid CreatedById { get; set; }
+
+        public bool? IsOnline { get; set; } = false;
     }
 }

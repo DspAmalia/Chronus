@@ -45,6 +45,9 @@ namespace Chronus.Migrations
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool?>("IsOnline")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Participants")
                         .HasColumnType("nvarchar(max)");
 
@@ -181,6 +184,35 @@ namespace Chronus.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("Chronus.Models.MainModels.MeetingAttendance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CheckedInAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("EventId");
+
+                    b.ToTable("MeetingAttendances");
                 });
 
             modelBuilder.Entity("Chronus.Models.MainModels.RawAuditEvent", b =>
@@ -436,6 +468,25 @@ namespace Chronus.Migrations
                     b.Navigation("Department");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("Chronus.Models.MainModels.MeetingAttendance", b =>
+                {
+                    b.HasOne("Chronus.Models.MainModels.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Chronus.Models.MainModels.CalendarEvent", "CalendarEvent")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("CalendarEvent");
+
+                    b.Navigation("Employee");
                 });
 
             modelBuilder.Entity("Chronus.Models.MainModels.RawAuditEvent", b =>

@@ -24,7 +24,7 @@
         <div>
             <div class="d-flex align-items-center gap-2">
                 <div class="rounded-3 text-white p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: linear-gradient(135deg, #4f46e5, #6366f1);">
-                    <i class="bi bi-laptop fs-5"></i>
+                    <i class="bi bi-clock-history fs-5"></i>
                 </div>
                 <div>
                     <h3 class="fw-bold text-dark mb-0">Device & Attendance Management</h3>
@@ -126,7 +126,7 @@
                                 <th class="py-3">Net Work Time</th>
                                 <th class="py-3">Break Time</th>
                                 <th class="py-3">Confidence Score</th>
-                                <th class="pe-4 py-3 text-end">Status</th>
+                                <th class="pe-4 py-3 text-end">Status / Clock Out</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -139,6 +139,9 @@
                                 ? empName.Substring(0, Math.Min(2, empName.Length)).ToUpper()
                                 : "EM";
                                 var scorePercentage = entry.ConfidenceScore * 100;
+
+                                // Calculăm ora de ieșire direct pe baza: ClockInUtc + NetWorkMinutes + TotalBreakMinutes
+                                var calculatedClockOut = entry.ClockInUtc.AddMinutes(entry.NetWorkMinutes + entry.TotalBreakMinutes);
 
                                 <tr>
                                     <td class="ps-4 py-3">
@@ -184,30 +187,42 @@
                                         </div>
                                     </td>
                                     <td class="pe-4 py-3 text-end">
-                                        @if (entry.ClockOutUtc.HasValue && entry.Status == EntryStatus.InProgress)
+                                        @if (entry.Date < DateOnly.FromDateTime(DateTime.Today))
                                         {
-                                            <span class="badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fw-medium">
-                                                <i class="bi bi-pause-fill me-1"></i> On Break
+                                            <!-- Pentru zilele trecute afișăm rezultatul calculat din ClockIn + NetWorkMinutes + TotalBreakMinutes -->
+                                            <span class="badge rounded-pill bg-light text-dark border px-3 py-2 font-monospace fw-medium">
+                                                <i class="bi bi-box-arrow-right text-danger me-1"></i>
+                                                @calculatedClockOut.ToLocalTime().ToString("HH:mm:ss")
                                             </span>
                                         }
-                                        else switch (entry.Status)
+                                        else
+                                        {
+                                            <!-- Pentru ziua curentă păstrăm starea dinamică -->
+                                            @if (entry.ClockOutUtc.HasValue && entry.Status == EntryStatus.InProgress)
                                             {
-                                                case EntryStatus.InProgress:
-                                                    <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-medium">
-                                                        <i class="bi bi-play-fill me-1"></i> Active
-                                                    </span>
-                                                    break;
-                                                case EntryStatus.Approved:
-                                                    <span class="badge rounded-pill bg-indigo-subtle text-indigo border border-indigo-subtle px-3 py-2 fw-medium" style="background-color: #eef2ff; color: #4f46e5; border-color: #c7d2fe !important;">
-                                                        <i class="bi bi-check-circle-fill me-1"></i> Approved
-                                                    </span>
-                                                    break;
-                                                default:
-                                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 fw-medium">
-                                                        @entry.Status
-                                                    </span>
-                                                    break;
+                                                <span class="badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fw-medium">
+                                                    <i class="bi bi-pause-fill me-1"></i> On Break
+                                                </span>
                                             }
+                                            else switch (entry.Status)
+                                                {
+                                                    case EntryStatus.InProgress:
+                                                        <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-medium">
+                                                            <i class="bi bi-play-fill me-1"></i> Active
+                                                        </span>
+                                                        break;
+                                                    case EntryStatus.Approved:
+                                                        <span class="badge rounded-pill bg-indigo-subtle text-indigo border border-indigo-subtle px-3 py-2 fw-medium" style="background-color: #eef2ff; color: #4f46e5; border-color: #c7d2fe !important;">
+                                                            <i class="bi bi-check-circle-fill me-1"></i> Approved
+                                                        </span>
+                                                        break;
+                                                    default:
+                                                        <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 fw-medium">
+                                                            @entry.Status
+                                                        </span>
+                                                        break;
+                                                }
+                                        }
                                     </td>
                                 </tr>
                             }
@@ -251,7 +266,6 @@
     {
         await ResolveCurrentEmployeeAsync();
 
-        // 🔑 Dacă utilizatorul nu este logat, îl trimitem imediat la login!
         if (currentEmployee == null)
         {
             Navigation.NavigateTo("/employees/login", forceLoad: true);
@@ -259,12 +273,45 @@
         }
 
         await CheckDeviceRegistrationAsync();
+
+        // 1. Închidem automat zilele trecute setând ClockOutUtc pe baza calculului real
+        await ClosePreviousOpenEntriesAsync();
+
+        // 2. Creăm pontajul strict pentru ziua curentă dacă nu există
         await EnsureTodayTimeEntryExistsAsync();
 
         await LoadDataAsync();
 
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
         _ = PollDatabaseAsync();
+    }
+
+    private async Task ClosePreviousOpenEntriesAsync()
+    {
+        if (currentEmployee == null) return;
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        var oldOpenEntries = await db.TimeEntries
+            .Where(t => t.EmployeeId == currentEmployee.Id && t.Date < today && (t.Status == EntryStatus.InProgress || !t.ClockOutUtc.HasValue))
+            .ToListAsync();
+
+        foreach (var entry in oldOpenEntries)
+        {
+            // Dacă nu are oră de ieșire setată, o calculăm automat din Ora de Intrare + Minute Lucrate + Pauză
+            if (!entry.ClockOutUtc.HasValue)
+            {
+                entry.ClockOutUtc = entry.ClockInUtc.AddMinutes(entry.NetWorkMinutes + entry.TotalBreakMinutes);
+            }
+
+            entry.Status = EntryStatus.Approved;
+        }
+
+        if (oldOpenEntries.Any())
+        {
+            await db.SaveChangesAsync();
+        }
     }
 
     private async Task CheckDeviceRegistrationAsync()
@@ -283,10 +330,10 @@
         using var db = await DbFactory.CreateDbContextAsync();
         var today = DateOnly.FromDateTime(DateTime.Today);
 
-        bool entryExists = await db.TimeEntries
+        bool todayEntryExists = await db.TimeEntries
             .AnyAsync(t => t.EmployeeId == currentEmployee.Id && t.Date == today);
 
-        if (!entryExists)
+        if (!todayEntryExists)
         {
             var newEntry = new TimeEntry
                 {
@@ -362,8 +409,6 @@
             }
 
             await db.SaveChangesAsync();
-
-            // Setăm starea ca înregistrată, ceea ce va ascunde automat cardul galben
             isDeviceRegistered = true;
         }
         catch (Exception ex)
@@ -379,7 +424,6 @@
         {
             while (await _timer!.WaitForNextTickAsync(_cts.Token))
             {
-                // 🔑 Verificăm la fiecare 3 secunde (în timpul auto-refresh-ului) dacă a expirat sesiunea
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 if (authState.User.Identity == null || !authState.User.Identity.IsAuthenticated)
                 {
