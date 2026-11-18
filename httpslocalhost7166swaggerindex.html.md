@@ -44,6 +44,6 @@ Secret: GOCSPX-lIr-7kNEFEH5M8Xm5rV\_xsG4LeRD
 
 
 
-1. sa ia in calcul userul logat la pontaj
+1. sa ia in calcul userul logat la pontaj - se face doar daca e alt device
 2. sa se ia in calcul si pe conturile logate prin google
 
