@@ -16,33 +16,69 @@
 
 <div class="container-fluid mt-3 px-4 mb-5">
     <!-- Header -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+    <div class="d-flex flex-column flex-xl-row justify-content-between align-items-start align-items-xl-center gap-3 mb-4">
         <div class="d-flex align-items-center gap-3">
             <div class="rounded-3 text-white p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: linear-gradient(135deg, #10b981, #059669);">
                 <i class="bi bi-file-earmark-bar-graph fs-5"></i>
             </div>
             <div>
                 <h3 class="fw-bold text-dark mb-0">My Performance & Daily Timesheet Report</h3>
-                <p class="text-muted small mb-0">Overview of working hours, breaks, attended meetings, and tasks accomplished per day.</p>
+                <p class="text-muted small mb-0">
+                    Overview of working hours, breaks, attended meetings, and tasks accomplished per day.
+                    @if (selectedEmployee != null)
+                    {
+                        <span class="ms-1 fw-semibold text-dark">
+                            • Employee: <strong>@(selectedEmployee.Email ?? selectedEmployee.UserName)</strong>
+                        </span>
+                    }
+                </p>
             </div>
         </div>
 
-        <!-- Filtru cu Interval Personalizat de Date Modern și Compact -->
-        <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm shadow-sm rounded-3 overflow-hidden bg-white border" style="width: auto;">
-                <span class="input-group-text bg-light text-secondary border-0 px-2 fw-semibold fs-8">
-                    <i class="bi bi-calendar-range me-1 text-primary"></i> Starting with:
-                </span>
-                <input type="date" class="form-control border-0 bg-transparent fw-medium py-1 px-2 text-dark" @bind="exportStartDate" style="max-width: 130px;" />
+        <!-- Toolbar pe un singur rând: Employee + From/To + Export Excel -->
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            @if (isManager && employeesList.Any())
+            {
+                <div class="d-flex align-items-center bg-white border rounded-3 shadow-sm px-2" style="height: 36px;">
+                    <span class="small fw-semibold text-secondary me-1 text-nowrap">
+                        <i class="bi bi-person-badge text-primary me-1"></i>Employee:
+                    </span>
+                    <select class="form-select form-select-sm border-0 bg-transparent fw-medium text-dark py-0 ps-1 pe-4 shadow-none"
+                            style="width: auto; min-width: 190px; cursor: pointer;"
+                            value="@selectedEmployeeId"
+                            @onchange="OnEmployeeChanged">
+                        @foreach (var emp in employeesList)
+                        {
+                            <option value="@emp.Id">
+                                @(emp.Email ?? emp.UserName) @(emp.Id == currentEmployee?.Id ? "(You)" : "")
+                            </option>
+                        }
+                    </select>
+                </div>
+            }
 
-                <span class="input-group-text bg-light text-secondary border-0 px-2 fw-semibold fs-8 border-start">
-                    Ending with:
+            <div class="d-flex align-items-center bg-white border rounded-3 shadow-sm px-2" style="height: 36px;">
+                <span class="small fw-semibold text-secondary me-1 text-nowrap">
+                    <i class="bi bi-calendar-range text-primary me-1"></i>From:
                 </span>
-                <input type="date" class="form-control border-0 bg-transparent fw-medium py-1 px-2 text-dark" @bind="exportEndDate" style="max-width: 130px;" />
+                <input type="date"
+                       class="form-control form-control-sm border-0 bg-transparent fw-medium text-dark py-0 px-1 shadow-none"
+                       style="width: 125px;"
+                       @bind="exportStartDate" />
+
+                <span class="text-muted mx-1">|</span>
+
+                <span class="small fw-semibold text-secondary me-1 text-nowrap">To:</span>
+                <input type="date"
+                       class="form-control form-control-sm border-0 bg-transparent fw-medium text-dark py-0 px-1 shadow-none"
+                       style="width: 125px;"
+                       @bind="exportEndDate" />
             </div>
 
-            <button class="btn btn-success btn-sm d-flex align-items-center gap-2 px-3 py-2 rounded-3 shadow-xs fw-medium text-white" @onclick="ExportToExcelAsync" style="background-color: #10b981; border-color: #10b981;">
-                <i class="bi bi-file-earmark-excel fs-6"></i>
+            <button class="btn btn-success btn-sm d-flex align-items-center gap-2 px-3 rounded-3 shadow-sm fw-medium text-white text-nowrap"
+                    @onclick="ExportToExcelAsync"
+                    style="height: 36px; background-color: #10b981; border-color: #10b981;">
+                <i class="bi bi-file-earmark-excel"></i>
                 <span>Export Excel</span>
             </button>
         </div>
@@ -85,20 +121,21 @@
             </div>
         </div>
 
-        <!-- TABEL PRINCIPAL DE PONTAJ PE ZILE -->
+        <!-- TABEL PRINCIPAL DE PONTAJ PE ZILE (ACTUALIZAT AUTOMAT DUPĂ FILTRUL FROM / TO) -->
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-                    <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <h5 class="fw-bold text-dark mb-0">
                             <i class="bi bi-journal-check me-2 text-primary"></i>Daily Timesheet & Activity Breakdown
                         </h5>
-                        <span class="badge bg-light text-secondary border px-3 py-2">
-                            <i class="bi bi-calendar3 me-1"></i> Current Logging History
+                        <span class="badge bg-light text-secondary border px-3 py-2 font-monospace">
+                            <i class="bi bi-calendar3 me-1"></i>
+                            @exportStartDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) — @exportEndDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)
                         </span>
                     </div>
 
-                    @if (dailyReports.Any())
+                    @if (FilteredDailyReports.Any())
                     {
                         <div class="table-responsive">
                             <table class="table table-hover align-middle">
@@ -112,7 +149,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (var dayLog in dailyReports)
+                                    @foreach (var dayLog in FilteredDailyReports)
                                     {
                                         var isPastDay = dayLog.Date.Date < DateTime.Today;
                                         DateTime? computedClockOut = null;
@@ -216,18 +253,29 @@
                     }
                     else
                     {
-                        <p class="text-muted small fst-italic text-center py-4">No timesheet records available.</p>
+                        <p class="text-muted small fst-italic text-center py-4">
+                            No timesheet records found for the selected date range.
+                        </p>
                     }
                 </div>
             </div>
         </div>
 
-        <!-- SECTIUNE DETALIATA PENTRU PREZENTA LA MEETING-URI -->
+        <!-- SECTIUNE DETALIATA PENTRU PREZENTA LA MEETING-URI (ACTUALIZATĂ AUTOMAT DUPĂ FILTRUL FROM / TO) -->
         <div class="row">
             <div class="col-12">
                 <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-                    <h5 class="fw-bold text-dark mb-3"><i class="bi bi-calendar-check me-2 text-success"></i>Detailed Meeting Attendance Log</h5>
-                    @if (meetingAttendances.Any())
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                        <h5 class="fw-bold text-dark mb-0">
+                            <i class="bi bi-calendar-check me-2 text-success"></i>Detailed Meeting Attendance Log
+                        </h5>
+                        <span class="badge bg-light text-secondary border px-3 py-2 font-monospace">
+                            <i class="bi bi-calendar3 me-1"></i>
+                            @exportStartDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) — @exportEndDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)
+                        </span>
+                    </div>
+
+                    @if (FilteredMeetingAttendances.Any())
                     {
                         <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
                             <table class="table table-hover align-middle small">
@@ -239,7 +287,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (var att in meetingAttendances)
+                                    @foreach (var att in FilteredMeetingAttendances)
                                     {
                                         <tr>
                                             <td class="fw-bold">@(att.CalendarEvent?.Title ?? "Meeting")</td>
@@ -257,7 +305,9 @@
                     }
                     else
                     {
-                        <p class="text-muted small fst-italic">No meeting check-ins recorded yet.</p>
+                        <p class="text-muted small fst-italic mb-0">
+                            No meeting check-ins recorded for the selected date range.
+                        </p>
                     }
                 </div>
             </div>
@@ -265,9 +315,21 @@
     }
 </div>
 
+<style>
+    .fs-8 {
+        font-size: 0.75rem;
+    }
+</style>
+
 @code {
     private bool isLoading = true;
+    private bool isManager = false;
     private Employee? currentEmployee;
+
+    private List<Employee> employeesList = new();
+    private Guid selectedEmployeeId = Guid.Empty;
+    private Employee? selectedEmployee => employeesList.FirstOrDefault(e => e.Id == selectedEmployeeId) ?? currentEmployee;
+
     private DateTime exportStartDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime exportEndDate = DateTime.Today;
 
@@ -280,50 +342,132 @@
     private int totalNetMinutes = 0;
     private int totalBreakMinutes = 0;
 
+    private List<DailyReportRow> FilteredDailyReports
+    {
+        get
+        {
+            var start = exportStartDate.Date;
+            var end = exportEndDate.Date;
+
+            if (start > end)
+            {
+                (start, end) = (end, start);
+            }
+
+            return dailyReports
+                .Where(r => r.Date.Date >= start && r.Date.Date <= end)
+                .OrderByDescending(r => r.Date)
+                .ToList();
+        }
+    }
+
+    private List<MeetingAttendance> FilteredMeetingAttendances
+    {
+        get
+        {
+            var start = exportStartDate.Date;
+            var end = exportEndDate.Date;
+
+            if (start > end)
+            {
+                (start, end) = (end, start);
+            }
+
+            return meetingAttendances
+                .Where(a =>
+                {
+                    var checkInLocalDate = a.CheckedInAtUtc.ToLocalTime().Date;
+                    var eventDate = a.CalendarEvent?.StartTime.Date;
+                    var effectiveDate = eventDate ?? checkInLocalDate;
+                    return effectiveDate >= start && effectiveDate <= end;
+                })
+                .OrderByDescending(a => a.CheckedInAtUtc)
+                .ToList();
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        currentEmployee = await UserManager.GetUserAsync(authState.User);
+        var principal = authState.User;
+        currentEmployee = await UserManager.GetUserAsync(principal);
 
         if (currentEmployee != null)
         {
-            using var db = await DbFactory.CreateDbContextAsync();
+            isManager = principal.IsInRole("Manager") || principal.IsInRole("Admin");
+            selectedEmployeeId = currentEmployee.Id;
 
-            // 1. Încarcă pontajele de timp
-            timeEntries = await db.TimeEntries
-                .Where(t => t.EmployeeId == currentEmployee.Id)
-                .OrderByDescending(t => t.Date)
-                .Take(30)
-                .ToListAsync();
+            if (isManager)
+            {
+                using var db = await DbFactory.CreateDbContextAsync();
+                employeesList = await db.Users
+                    .OrderBy(u => u.Email ?? u.UserName)
+                    .ToListAsync();
+            }
+            else
+            {
+                employeesList = new List<Employee> { currentEmployee };
+            }
 
-            totalNetMinutes = timeEntries.Sum(t => t.NetWorkMinutes);
-            totalBreakMinutes = timeEntries.Sum(t => t.TotalBreakMinutes);
-
-            // 2. Încarcă prezențele la întâlniri
-            meetingAttendances = await db.MeetingAttendances
-                .Include(a => a.CalendarEvent)
-                .Where(a => a.EmployeeId == currentEmployee.Id)
-                .OrderByDescending(a => a.CheckedInAtUtc)
-                .ToListAsync();
-
-            // 3. Încarcă toate evenimentele/task-urile/meeting-urile din calendar pentru user
-            userEvents = await db.CalendarEvent
-                .Where(e => e.EmployeeId == currentEmployee.Id)
-                .OrderByDescending(e => e.StartTime)
-                .ToListAsync();
-
-            completedTasksCount = userEvents.Count(e => e.EndTime < DateTime.Now &&
-                                                       (e.Category == null || !e.Category.Equals("Meeting", StringComparison.OrdinalIgnoreCase)));
-
-            // 4. Agregare date pe zile (Daily Timesheet)
-            BuildDailyReports();
+            await LoadReportForEmployeeAsync(selectedEmployeeId);
         }
 
         isLoading = false;
     }
 
+    private async Task OnEmployeeChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var newEmpId))
+        {
+            selectedEmployeeId = newEmpId;
+            isLoading = true;
+            StateHasChanged();
+
+            await LoadReportForEmployeeAsync(selectedEmployeeId);
+
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadReportForEmployeeAsync(Guid targetEmployeeId)
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+
+        dailyReports.Clear();
+        completedTasksCount = 0;
+        totalNetMinutes = 0;
+        totalBreakMinutes = 0;
+
+        timeEntries = await db.TimeEntries
+            .Where(t => t.EmployeeId == targetEmployeeId)
+            .OrderByDescending(t => t.Date)
+            .Take(60)
+            .ToListAsync();
+
+        totalNetMinutes = timeEntries.Sum(t => t.NetWorkMinutes);
+        totalBreakMinutes = timeEntries.Sum(t => t.TotalBreakMinutes);
+
+        meetingAttendances = await db.MeetingAttendances
+            .Include(a => a.CalendarEvent)
+            .Where(a => a.EmployeeId == targetEmployeeId)
+            .OrderByDescending(a => a.CheckedInAtUtc)
+            .ToListAsync();
+
+        userEvents = await db.CalendarEvent
+            .Where(e => e.EmployeeId == targetEmployeeId)
+            .OrderByDescending(e => e.StartTime)
+            .ToListAsync();
+
+        completedTasksCount = userEvents.Count(e => e.EndTime < DateTime.Now &&
+                                                   (e.Category == null || !e.Category.Equals("Meeting", StringComparison.OrdinalIgnoreCase)));
+
+        BuildDailyReports();
+    }
+
     private void BuildDailyReports()
     {
+        dailyReports.Clear();
+
         var entryDates = timeEntries.Select(t => t.Date.ToDateTime(TimeOnly.MinValue).Date);
         var eventDates = userEvents.Select(e => e.StartTime.Date);
         var distinctDates = entryDates.Union(eventDates).OrderByDescending(d => d).ToList();
@@ -355,7 +499,6 @@
 
     private async Task ExportToExcelAsync()
     {
-        // Validare simplă pentru interval
         if (exportStartDate > exportEndDate)
         {
             var temp = exportStartDate;
@@ -363,27 +506,25 @@
             exportEndDate = temp;
         }
 
-        // Filtram rapoartele strict pe intervalul ales [Start, End]
-        var filteredReports = dailyReports
-            .Where(r => r.Date.Date >= exportStartDate.Date && r.Date.Date <= exportEndDate.Date)
+        var filteredReports = FilteredDailyReports
             .OrderBy(r => r.Date)
             .ToList();
 
         using var workbook = new ClosedXML.Excel.XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Pontaj & Calendar");
 
-        // Antet tabel
-        worksheet.Cell(1, 1).Value = "Date";
-        worksheet.Cell(1, 2).Value = "Event / Activity";
-        worksheet.Cell(1, 3).Value = "Opening Hour";
-        worksheet.Cell(1, 4).Value = "Ending Hour";
+        // Antet tabel (strict coloanele 1..4)
+        worksheet.Cell(1, 1).Value = "Data";
+        worksheet.Cell(1, 2).Value = "Eveniment / Activitate";
+        worksheet.Cell(1, 3).Value = "Ora Început";
+        worksheet.Cell(1, 4).Value = "Ora Sfârșit";
 
-        var headerRow = worksheet.Row(1);
-        headerRow.Style.Font.Bold = true;
-        headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#10b981");
-        headerRow.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
-        headerRow.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-        headerRow.Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+        var headerRange = worksheet.Range(1, 1, 1, 4);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#10b981");
+        headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+        headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+        headerRange.Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
 
         int currentRow = 2;
         int dayIndex = 0;
@@ -395,33 +536,78 @@
             int startRowForDay = currentRow;
             string currentDayBgColor = dayColors[dayIndex % dayColors.Length];
 
+            var normalizedActivities = dayLog.Activities
+                .Select(a => new
+                {
+                    Title = a.Title,
+                    IsMeeting = a.IsMeeting,
+                    Start = a.StartTime.Kind == DateTimeKind.Utc ? a.StartTime.ToLocalTime() : a.StartTime,
+                    End = a.EndTime.Kind == DateTimeKind.Utc ? a.EndTime.ToLocalTime() : a.EndTime
+                })
+                .OrderBy(a => a.Start)
+                .ThenBy(a => a.End)
+                .ToList();
+
+            bool hasValidClockRange = false;
+            DateTime clockInLocal = DateTime.MinValue;
+            DateTime clockOutLocal = DateTime.MinValue;
+
             if (dayLog.TimeEntry != null)
             {
                 var isPastDay = dayLog.Date.Date < DateTime.Today;
-                DateTime clockInLocal = dayLog.TimeEntry.ClockInUtc.ToLocalTime();
+                clockInLocal = dayLog.TimeEntry.ClockInUtc.ToLocalTime();
 
                 DateTime clockOutUtc = isPastDay
                     ? dayLog.TimeEntry.ClockInUtc.AddMinutes(dayLog.TimeEntry.NetWorkMinutes + dayLog.TimeEntry.TotalBreakMinutes)
                     : (dayLog.TimeEntry.ClockOutUtc ?? DateTime.UtcNow);
 
-                DateTime clockOutLocal = clockOutUtc.ToLocalTime();
+                clockOutLocal = clockOutUtc.ToLocalTime();
 
-                var sortedActivities = dayLog.Activities
-                    .Select(a => new
-                    {
-                        Title = a.Title,
-                        IsMeeting = a.IsMeeting,
-                        Start = a.StartTime.Kind == DateTimeKind.Utc ? a.StartTime.ToLocalTime() : a.StartTime,
-                        End = a.EndTime.Kind == DateTimeKind.Utc ? a.EndTime.ToLocalTime() : a.EndTime
-                    })
-                    .Where(a => a.End >= clockInLocal && a.Start <= clockOutLocal)
-                    .OrderBy(a => a.Start)
-                    .ToList();
+                if (clockOutLocal > clockInLocal)
+                {
+                    hasValidClockRange = true;
+                }
+            }
 
+            if (hasValidClockRange)
+            {
                 DateTime currentCursor = clockInLocal;
 
-                foreach (var act in sortedActivities)
+                foreach (var act in normalizedActivities)
                 {
+                    if (act.End <= clockInLocal)
+                    {
+                        worksheet.Cell(currentRow, 1).Value = formattedDate;
+                        worksheet.Cell(currentRow, 2).Value = (act.IsMeeting ? "[Meeting] " : "[Task] ") + act.Title;
+                        worksheet.Cell(currentRow, 3).Value = act.Start.ToString("HH:mm");
+                        worksheet.Cell(currentRow, 4).Value = act.End.ToString("HH:mm");
+                        ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
+                        currentRow++;
+                        continue;
+                    }
+
+                    if (act.Start >= clockOutLocal)
+                    {
+                        if (currentCursor < clockOutLocal)
+                        {
+                            worksheet.Cell(currentRow, 1).Value = formattedDate;
+                            worksheet.Cell(currentRow, 2).Value = "-";
+                            worksheet.Cell(currentRow, 3).Value = currentCursor.ToString("HH:mm");
+                            worksheet.Cell(currentRow, 4).Value = clockOutLocal.ToString("HH:mm");
+                            ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
+                            currentRow++;
+                            currentCursor = clockOutLocal;
+                        }
+
+                        worksheet.Cell(currentRow, 1).Value = formattedDate;
+                        worksheet.Cell(currentRow, 2).Value = (act.IsMeeting ? "[Meeting] " : "[Task] ") + act.Title;
+                        worksheet.Cell(currentRow, 3).Value = act.Start.ToString("HH:mm");
+                        worksheet.Cell(currentRow, 4).Value = act.End.ToString("HH:mm");
+                        ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
+                        currentRow++;
+                        continue;
+                    }
+
                     DateTime actStart = act.Start < clockInLocal ? clockInLocal : act.Start;
                     DateTime actEnd = act.End > clockOutLocal ? clockOutLocal : act.End;
 
@@ -431,7 +617,6 @@
                         worksheet.Cell(currentRow, 2).Value = "-";
                         worksheet.Cell(currentRow, 3).Value = currentCursor.ToString("HH:mm");
                         worksheet.Cell(currentRow, 4).Value = actStart.ToString("HH:mm");
-
                         ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
                         currentRow++;
                     }
@@ -442,7 +627,6 @@
                         worksheet.Cell(currentRow, 2).Value = (act.IsMeeting ? "[Meeting] " : "[Task] ") + act.Title;
                         worksheet.Cell(currentRow, 3).Value = actStart.ToString("HH:mm");
                         worksheet.Cell(currentRow, 4).Value = actEnd.ToString("HH:mm");
-
                         ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
                         currentRow++;
                     }
@@ -459,29 +643,38 @@
                     worksheet.Cell(currentRow, 2).Value = "-";
                     worksheet.Cell(currentRow, 3).Value = currentCursor.ToString("HH:mm");
                     worksheet.Cell(currentRow, 4).Value = clockOutLocal.ToString("HH:mm");
-
                     ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
                     currentRow++;
                 }
             }
-            else if (dayLog.Activities.Any())
+            else if (normalizedActivities.Any())
             {
-                foreach (var act in dayLog.Activities.OrderBy(a => a.StartTime))
+                foreach (var act in normalizedActivities)
                 {
-                    DateTime actStart = act.StartTime.Kind == DateTimeKind.Utc ? act.StartTime.ToLocalTime() : act.StartTime;
-                    DateTime actEnd = act.EndTime.Kind == DateTimeKind.Utc ? act.EndTime.ToLocalTime() : act.EndTime;
-
                     worksheet.Cell(currentRow, 1).Value = formattedDate;
                     worksheet.Cell(currentRow, 2).Value = (act.IsMeeting ? "[Meeting] " : "[Task] ") + act.Title;
-                    worksheet.Cell(currentRow, 3).Value = actStart.ToString("HH:mm");
-                    worksheet.Cell(currentRow, 4).Value = actEnd.ToString("HH:mm");
+                    worksheet.Cell(currentRow, 3).Value = act.Start.ToString("HH:mm");
+                    worksheet.Cell(currentRow, 4).Value = act.End.ToString("HH:mm");
 
                     ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
                     currentRow++;
                 }
             }
+            else
+            {
+                string timeText = dayLog.TimeEntry != null
+                    ? dayLog.TimeEntry.ClockInUtc.ToLocalTime().ToString("HH:mm")
+                    : "-";
 
-            // Unire (Merge) celule pe coloana de dată pentru zilele cu mai multe rânduri
+                worksheet.Cell(currentRow, 1).Value = formattedDate;
+                worksheet.Cell(currentRow, 2).Value = "-";
+                worksheet.Cell(currentRow, 3).Value = timeText;
+                worksheet.Cell(currentRow, 4).Value = timeText;
+
+                ApplyRowStyling(worksheet, currentRow, currentDayBgColor);
+                currentRow++;
+            }
+
             if (currentRow > startRowForDay)
             {
                 int endRowForDay = currentRow - 1;
@@ -499,7 +692,6 @@
             dayIndex++;
         }
 
-        // Aplicare margini de tabel
         if (currentRow > 2)
         {
             var tableRange = worksheet.Range(1, 1, currentRow - 1, 4);
@@ -509,19 +701,21 @@
             tableRange.Style.Border.OutsideBorderColor = ClosedXML.Excel.XLColor.FromHtml("#cbd5e1");
         }
 
-        worksheet.Columns().AdjustToContents();
+        worksheet.Columns(1, 4).AdjustToContents();
 
         using var stream = new System.IO.MemoryStream();
         workbook.SaveAs(stream);
         var bytes = stream.ToArray();
         var base64 = Convert.ToBase64String(bytes);
 
-        string fileName = $"Attendance_Report_{exportStartDate:yyyyMMdd}_la_{exportEndDate:yyyyMMdd}.xlsx";
+        string empLabel = (selectedEmployee?.Email ?? selectedEmployee?.UserName ?? "Employee")
+            .Replace("@", "_")
+            .Replace(".", "_");
+
+        string fileName = $"Pontaj_{empLabel}_{exportStartDate:yyyyMMdd}_la_{exportEndDate:yyyyMMdd}.xlsx";
         await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", fileName, base64);
     }
 
-
-    // Metodă ajutătoare pentru aplicarea stilului și culorilor pe rânduri
     private void ApplyRowStyling(ClosedXML.Excel.IXLWorksheet worksheet, int rowNum, string hexColor)
     {
         var row = worksheet.Row(rowNum);

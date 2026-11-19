@@ -116,7 +116,6 @@
                         </InputSelect>
                     </div>
 
-                    <!-- Online Checkbox (Appears strictly when Category is "Meeting") -->
                     @if (newEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
                     {
                         <div class="col-md-12">
@@ -161,8 +160,10 @@
                         <InputTextArea class="form-control" @bind-Value="newEvent.Description" rows="2" placeholder="Optional details..." />
                     </div>
                     <div class="col-12 d-flex justify-content-end gap-2 mt-3">
-                        <button type="button" class="btn btn-outline-secondary px-3" @onclick="CloseAddModal">Cancel</button>
-                        <button type="submit" class="btn btn-success px-4">Save & Invite</button>
+                        <button type="button" class="btn btn-outline-secondary px-3" @onclick="CloseAddModal" disabled="@isSaving">Cancel</button>
+                        <button type="submit" class="btn btn-success px-4" disabled="@isSaving">
+                            @(isSaving ? "Saving..." : "Save & Invite")
+                        </button>
                     </div>
                 </div>
             </EditForm>
@@ -210,7 +211,6 @@
                             </div>
                         </div>
 
-                        <!-- QR Code for Offline Meetings or Success Notification for Online Meetings -->
                         @if (viewingEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
                         {
                             @if (viewingEvent.IsOnline == true)
@@ -274,7 +274,6 @@
 
     <!-- TEAMS STYLE TIME GRID CALENDAR -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-        <!-- Days Header (Dynamic based on View Mode) -->
         <div class="calendar-header-grid border-bottom bg-light" style="grid-template-columns: 70px repeat(@displayedDays.Count, 1fr);">
             <div class="time-col-header border-end text-muted small fw-bold text-center py-3">Time</div>
             @foreach (var day in displayedDays)
@@ -287,7 +286,6 @@
             }
         </div>
 
-        <!-- Calendar Body (Hours 08:00 - 20:00) -->
         <div class="calendar-body-scroll">
             @{
                 var staticNow = DateTime.Now;
@@ -296,12 +294,10 @@
             {
                 var currentHour = hour;
                 <div class="calendar-row border-bottom d-flex position-relative">
-                    <!-- Hour Column -->
                     <div class="time-col border-end text-muted small text-center py-2 font-monospace">
                         @hour.ToString("00"):00
                     </div>
 
-                    <!-- Slots for each active day -->
                     @foreach (var day in displayedDays)
                     {
                         var targetSlotTime = new DateTime(day.Year, day.Month, day.Day, hour, 0, 0);
@@ -316,7 +312,6 @@
                         <div class="day-cell border-end p-1 position-relative @(isTargetable ? "slot-clickable" : "")"
                              @onclick="() => OnSlotClick(targetSlotTime)">
 
-                            <!-- Real-Time Red Indicator Line -->
                             @if (isTodayCell)
                             {
                                 var minuteOffset = (staticNow.Minute / 60.0) * 100;
@@ -409,7 +404,6 @@
     </div>
 }
 
-<!-- Hidden Audio Element with a Soft Pleasant Chime Sound -->
 <audio id="alertSound" src="https://assets.mixkit.co/active_storage/sfx/2865/2865-preview.mp3" preload="auto"></audio>
 
 <style>
@@ -462,7 +456,6 @@
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4) !important;
     }
 
-    /* Floating Toast Positioned at Bottom Right */
     .floating-toast {
         position: fixed;
         bottom: 25px;
@@ -487,7 +480,6 @@
         }
     }
 
-    /* Real-Time Red Current Time Indicator */
     .current-time-line {
         position: absolute;
         left: 0;
@@ -527,18 +519,17 @@
     private List<DateTime> displayedDays = new();
     private DateTime currentDate = DateTime.Today;
 
-    // Category filter
     private List<string> availableCategories = new();
     private HashSet<string> selectedCategories = new(StringComparer.OrdinalIgnoreCase);
 
     private bool showAddModal = false;
     private bool showDetailsModal = false;
+    private bool isSaving = false;
     private CalendarEvent? viewingEvent = null;
     private CalendarEvent newEvent = new();
     private string currentEmployeeId = string.Empty;
     private Guid selectedEventId = Guid.Empty;
 
-    // Timer for 10 min and 5 min meeting alerts
     private System.Timers.Timer? alertTimer;
     private HashSet<Guid> alerted10Min = new();
     private HashSet<Guid> alerted5Min = new();
@@ -685,29 +676,31 @@
 
     private async Task LoadEventsAsync()
     {
-        if (string.IsNullOrEmpty(currentEmployeeId)) return;
+        if (string.IsNullOrEmpty(currentEmployeeId) || !displayedDays.Any()) return;
 
         using var db = await DbFactory.CreateDbContextAsync();
 
-        // Extindem fereastra de încărcare: luăm de la cu 3 luni în urmă până la 3 luni în viitor
-        // sau încărcăm toate evenimentele asociate employee-ului pentru a nu dispărea la schimbarea săptămânii
         var startDate = displayedDays.First().AddDays(-30);
         var endDate = displayedDays.Last().AddDays(30);
 
-        eventsList = await db.CalendarEvent
+        var rawEvents = await db.CalendarEvent
             .Where(e => (e.EmployeeId.ToString() == currentEmployeeId || e.CreatedById.ToString() == currentEmployeeId)
                      && e.EndTime >= startDate && e.StartTime <= endDate)
             .OrderBy(e => e.StartTime)
             .ToListAsync();
 
-        // Actualizăm categoriile disponibile pentru filtre
+        // Elimină eventualele duplicate pe același titlu și interval orar
+        eventsList = rawEvents
+            .GroupBy(e => new { e.Title, e.StartTime, e.EndTime, e.Category })
+            .Select(g => g.First())
+            .ToList();
+
         availableCategories = eventsList
             .Select(e => e.Category)
             .Where(c => !string.IsNullOrEmpty(c))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList()!;
 
-        // Dacă nu avem categorii selectate, le selectăm pe toate implicit
         if (!selectedCategories.Any() && availableCategories.Any())
         {
             selectedCategories = new HashSet<string>(availableCategories, StringComparer.OrdinalIgnoreCase);
@@ -716,39 +709,98 @@
 
     private void ToggleCategoryFilter(string category)
     {
-        if (selectedCategories.Contains(category))
-        {
-            selectedCategories.Remove(category);
-        }
-        else
+        if (!selectedCategories.Remove(category))
         {
             selectedCategories.Add(category);
         }
     }
 
-    private void ShowToast(string message, string type = "success")
+    private void ToggleEmployeeSelection(Guid empId)
     {
-        toastMessage = message;
-        toastType = type;
+        if (!selectedEmployeeIds.Remove(empId))
+        {
+            selectedEmployeeIds.Add(empId);
+        }
     }
 
     private void OpenAddModal()
     {
-        selectedEventId = Guid.Empty;
-        selectedEmployeeIds.Clear();
+        var now = DateTime.Now;
+        var roundedStart = new DateTime(now.Year, now.Month, now.Day, Math.Clamp(now.Hour, 8, 19), 0, 0);
+
         newEvent = new CalendarEvent
             {
-                EmployeeId = Guid.Parse(currentEmployeeId),
-                StartTime = DateTime.Now,
-                EndTime = DateTime.Now.AddHours(1),
+                StartTime = roundedStart,
+                EndTime = roundedStart.AddHours(1),
                 Priority = AgendaPriority.Normal,
-                Category = "Meeting",
-                IsOnline = true
+                Category = "Meeting"
             };
+        selectedEmployeeIds.Clear();
         showAddModal = true;
     }
 
-    private void CloseAddModal() => showAddModal = false;
+    private void CloseAddModal()
+    {
+        showAddModal = false;
+        selectedEmployeeIds.Clear();
+    }
+
+    private async Task SaveEvent()
+    {
+        if (isSaving || string.IsNullOrWhiteSpace(newEvent.Title)) return;
+        if (newEvent.EndTime <= newEvent.StartTime)
+        {
+            newEvent.EndTime = newEvent.StartTime.AddMinutes(30);
+        }
+
+        isSaving = true;
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var organizerId = Guid.Parse(currentEmployeeId);
+
+            var primaryEvent = new CalendarEvent
+                {
+                    Id = Guid.NewGuid(),
+                    Title = newEvent.Title.Trim(),
+                    Category = string.IsNullOrWhiteSpace(newEvent.Category) ? "Task" : newEvent.Category.Trim(),
+                    Priority = newEvent.Priority,
+                    Description = newEvent.Description,
+                    StartTime = newEvent.StartTime,
+                    EndTime = newEvent.EndTime,
+                    IsOnline = newEvent.IsOnline,
+                    EmployeeId = organizerId,
+                    CreatedById = organizerId
+                };
+
+            db.CalendarEvent.Add(primaryEvent);
+
+            foreach (var invitedId in selectedEmployeeIds.Distinct().Where(id => id != organizerId))
+            {
+                db.CalendarEvent.Add(new CalendarEvent
+                    {
+                        Id = Guid.NewGuid(),
+                        Title = primaryEvent.Title,
+                        Category = primaryEvent.Category,
+                        Priority = primaryEvent.Priority,
+                        Description = primaryEvent.Description,
+                        StartTime = primaryEvent.StartTime,
+                        EndTime = primaryEvent.EndTime,
+                        IsOnline = primaryEvent.IsOnline,
+                        EmployeeId = invitedId,
+                        CreatedById = organizerId
+                    });
+            }
+
+            await db.SaveChangesAsync();
+            await LoadEventsAsync();
+            CloseAddModal();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
 
     private void OpenDetailsModal(CalendarEvent ev)
     {
@@ -764,135 +816,14 @@
 
     private void StartMoveFromDetails(Guid eventId)
     {
-        CloseDetailsModal();
         selectedEventId = eventId;
+        CloseDetailsModal();
     }
 
-    private void ToggleEmployeeSelection(Guid empId)
-    {
-        if (selectedEmployeeIds.Contains(empId))
-            selectedEmployeeIds.Remove(empId);
-        else
-            selectedEmployeeIds.Add(empId);
-    }
-
-    private async Task SaveEvent()
-    {
-        if (newEvent.StartTime >= newEvent.EndTime)
-        {
-            ShowToast("Start time must be earlier than end time.", "warning");
-            return;
-        }
-
-        using var db = await DbFactory.CreateDbContextAsync();
-        var creatorGuid = Guid.Parse(currentEmployeeId);
-
-        var hasConflict = await db.CalendarEvent.AnyAsync(e =>
-            e.EmployeeId == creatorGuid &&
-            e.StartTime < newEvent.EndTime &&
-            e.EndTime > newEvent.StartTime);
-
-        if (hasConflict)
-        {
-            ShowToast("Warning: Selected time slot overlaps with another existing event!", "warning");
-            return;
-        }
-
-        // If category is not a meeting, ensure IsOnline is null
-        if (!newEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            newEvent.IsOnline = null;
-        }
-
-        newEvent.CreatedById = creatorGuid;
-        db.CalendarEvent.Add(newEvent);
-
-        bool isMeetingOnline = newEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true && newEvent.IsOnline == true;
-        if (isMeetingOnline)
-        {
-            db.MeetingAttendances.Add(new MeetingAttendance
-                {
-                    EventId = newEvent.Id,
-                    EmployeeId = creatorGuid,
-                    CheckedInAtUtc = DateTime.UtcNow,
-                    Status = "OnTime"
-                });
-        }
-
-        foreach (var empId in selectedEmployeeIds)
-        {
-            var invitedHasConflict = await db.CalendarEvent.AnyAsync(e =>
-                e.EmployeeId == empId &&
-                e.StartTime < newEvent.EndTime &&
-                e.EndTime > newEvent.StartTime);
-
-            if (invitedHasConflict)
-            {
-                var invitedEmployee = allEmployees.FirstOrDefault(x => x.Id == empId);
-                string empName = invitedEmployee?.Email ?? invitedEmployee?.UserName ?? "Colleague";
-                ShowToast($"Warning: Selected time overlaps with an event for invited user {empName}!", "warning");
-                return;
-            }
-
-            var invitedEvent = new CalendarEvent
-                {
-                    Id = Guid.NewGuid(),
-                    EmployeeId = empId,
-                    CreatedById = creatorGuid,
-                    Title = newEvent.Title,
-                    Description = newEvent.Description,
-                    StartTime = newEvent.StartTime,
-                    EndTime = newEvent.EndTime,
-                    Priority = newEvent.Priority,
-                    Category = newEvent.Category,
-                    IsOnline = newEvent.IsOnline
-                };
-            db.CalendarEvent.Add(invitedEvent);
-
-            if (isMeetingOnline)
-            {
-                db.MeetingAttendances.Add(new MeetingAttendance
-                    {
-                        EventId = invitedEvent.Id,
-                        EmployeeId = empId,
-                        CheckedInAtUtc = DateTime.UtcNow,
-                        Status = "OnTime"
-                    });
-            }
-        }
-
-        await db.SaveChangesAsync();
-        showAddModal = false;
-        ShowToast("Event successfully created and invitations sent!");
-        await LoadEventsAsync();
-    }
-
-    private async Task DeleteEvent(Guid id)
-    {
-        if (selectedEventId == id) selectedEventId = Guid.Empty;
-        if (viewingEvent?.Id == id) CloseDetailsModal();
-
-        using var db = await DbFactory.CreateDbContextAsync();
-        var item = await db.CalendarEvent.FindAsync(id);
-        if (item != null && (item.CreatedById == Guid.Empty || item.CreatedById.ToString() == currentEmployeeId))
-        {
-            db.CalendarEvent.Remove(item);
-            await db.SaveChangesAsync();
-            ShowToast("Event deleted successfully.", "info");
-            await LoadEventsAsync();
-        }
-    }
-
-    private void SelectEvent(Guid id, bool isOwner)
+    private void SelectEvent(Guid eventId, bool isOwner)
     {
         if (!isOwner) return;
-
-        if (selectedEventId == id)
-            selectedEventId = Guid.Empty;
-        else
-        {
-            selectedEventId = id;
-        }
+        selectedEventId = selectedEventId == eventId ? Guid.Empty : eventId;
     }
 
     private void CancelSelection()
@@ -905,52 +836,68 @@
         if (selectedEventId == Guid.Empty) return;
 
         using var db = await DbFactory.CreateDbContextAsync();
-        var itemToUpdate = await db.CalendarEvent.FindAsync(selectedEventId);
-
-        if (itemToUpdate != null && (itemToUpdate.CreatedById == Guid.Empty || itemToUpdate.CreatedById.ToString() == currentEmployeeId))
+        var ev = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == selectedEventId);
+        if (ev != null)
         {
-            var duration = itemToUpdate.EndTime - itemToUpdate.StartTime;
-            var newStart = new DateTime(targetSlotTime.Year, targetSlotTime.Month, targetSlotTime.Day,
-                                         targetSlotTime.Hour, itemToUpdate.StartTime.Minute, 0);
-            var newEnd = newStart.Add(duration);
-
-            var hasConflict = await db.CalendarEvent.AnyAsync(e =>
-                e.EmployeeId == itemToUpdate.EmployeeId &&
-                e.Id != itemToUpdate.Id &&
-                e.StartTime < newEnd &&
-                e.EndTime > newStart);
-
-            if (hasConflict)
-            {
-                ShowToast("Warning: Cannot move event, time slot is already occupied!", "warning");
-                selectedEventId = Guid.Empty;
-                return;
-            }
-
-            itemToUpdate.StartTime = newStart;
-            itemToUpdate.EndTime = newEnd;
-
-            db.CalendarEvent.Update(itemToUpdate);
+            var duration = ev.EndTime - ev.StartTime;
+            ev.StartTime = targetSlotTime;
+            ev.EndTime = targetSlotTime + duration;
             await db.SaveChangesAsync();
-            ShowToast("Event rescheduled successfully!");
         }
 
         selectedEventId = Guid.Empty;
         await LoadEventsAsync();
-        StateHasChanged();
     }
 
+    private async Task DeleteEvent(Guid eventId)
+    {
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+
+            // 1. Ștergem eventualele înregistrări de prezență legate de acest event/meeting
+            var attendances = await db.MeetingAttendances
+                .Where(a => a.Id == eventId)
+                .ToListAsync();
+
+            if (attendances.Any())
+            {
+                db.MeetingAttendances.RemoveRange(attendances);
+            }
+
+            // 2. Ștergem event-ul propriu-zis
+            var ev = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == eventId);
+            if (ev != null)
+            {
+                db.CalendarEvent.Remove(ev);
+                await db.SaveChangesAsync();
+            }
+
+            if (selectedEventId == eventId)
+            {
+                selectedEventId = Guid.Empty;
+            }
+
+            await LoadEventsAsync();
+        }
+        catch (Exception ex)
+        {
+            toastMessage = $"Nu s-a putut șterge evenimentul: {ex.Message}";
+            toastType = "warning";
+            StateHasChanged();
+        }
+    }
     private string GetPriorityColor(AgendaPriority priority) => priority switch
     {
         AgendaPriority.High => "#ef4444",
         AgendaPriority.Normal => "#3b82f6",
-        _ => "#94a3b8"
+        _ => "#10b981"
     };
 
     private string GetBadgeClass(AgendaPriority priority) => priority switch
     {
-        AgendaPriority.High => "bg-danger text-white",
-        AgendaPriority.Normal => "bg-primary text-white",
-        _ => "bg-secondary text-white"
+        AgendaPriority.High => "bg-danger",
+        AgendaPriority.Normal => "bg-primary",
+        _ => "bg-success"
     };
 }
