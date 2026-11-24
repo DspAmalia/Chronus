@@ -6,6 +6,8 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
+@using System.Text.Json
+@using System.Text.RegularExpressions
 @using System.Timers
 @inject IDbContextFactory<ChronusDbContext> DbFactory
 @inject UserManager<Employee> UserManager
@@ -69,25 +71,36 @@
 
     <!-- CATEGORY FILTER BAR -->
     <div class="card border-0 shadow-sm rounded-4 p-3 mb-3 bg-white">
-        <div class="d-flex flex-wrap align-items-center gap-3">
-            <span class="small fw-bold text-muted text-uppercase"><i class="bi bi-funnel-fill me-1 text-primary"></i> Filter by Category:</span>
-            @if (availableCategories.Any())
-            {
-                @foreach (var cat in availableCategories)
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <span class="small fw-bold text-muted text-uppercase"><i class="bi bi-funnel-fill me-1 text-primary"></i> Filter by Category:</span>
+                @if (availableCategories.Any())
                 {
-                    var isChecked = selectedCategories.Contains(cat);
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" role="switch" id="cat-@cat"
-                               checked="@isChecked"
-                               @onchange="() => ToggleCategoryFilter(cat)" />
-                        <label class="form-check-label small fw-semibold text-dark" for="cat-@cat">@cat</label>
-                    </div>
+                    @foreach (var cat in availableCategories)
+                    {
+                        var isChecked = selectedCategories.Contains(cat);
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="cat-@cat"
+                                   checked="@isChecked"
+                                   @onchange="() => ToggleCategoryFilter(cat)" />
+                            <label class="form-check-label small fw-semibold text-dark" for="cat-@cat">@cat</label>
+                        </div>
+                    }
                 }
-            }
-            else
-            {
-                <span class="text-muted small fst-italic">No categories available for current view.</span>
-            }
+                else
+                {
+                    <span class="text-muted small fst-italic">No categories available for current view.</span>
+                }
+            </div>
+
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="onlyDeclinedFilter"
+                       checked="@onlyEventsWithDeclinedInvitees"
+                       @onchange="ToggleOnlyDeclinedFilterAsync" />
+                <label class="form-check-label small fw-semibold text-danger" for="onlyDeclinedFilter">
+                    <i class="bi bi-person-x-fill me-1"></i>Only Declined Invitees
+                </label>
+            </div>
         </div>
     </div>
 
@@ -96,16 +109,37 @@
     {
         <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-light border-start border-primary border-4">
             <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-plus-circle me-2 text-primary"></i>Create Schedule Event & Invite Colleagues</h5>
+
+            @if (!string.IsNullOrEmpty(formErrorMessage))
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3 fs-8" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-6"></i>
+                    <span>@formErrorMessage</span>
+                </div>
+            }
+
             <EditForm Model="newEvent" OnValidSubmit="SaveEvent">
                 <DataAnnotationsValidator />
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-bold">Title</label>
-                        <InputText class="form-control" @bind-Value="newEvent.Title" placeholder="e.g. Team Sync" />
+                        <InputText class="form-control" @bind-Value="newEvent.Title" placeholder="e.g. Daily Standup" />
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold">Category</label>
-                        <InputText class="form-control" @bind-Value="newEvent.Category" placeholder="Meeting, Task..." />
+                        <InputSelect class="form-select" @bind-Value="selectedCategoryOption">
+                            <option value="Meeting">Meeting</option>
+                            <option value="Task">Task</option>
+                            <option value="Other">Other...</option>
+                        </InputSelect>
+
+                        @if (string.Equals(selectedCategoryOption, "Other", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <input type="text"
+                                   class="form-control form-control-sm mt-2"
+                                   placeholder="Custom category..."
+                                   @bind="customCategory" />
+                        }
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold">Priority</label>
@@ -116,7 +150,7 @@
                         </InputSelect>
                     </div>
 
-                    @if (newEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
+                    @if (IsMeetingCategory(EffectiveCategory))
                     {
                         <div class="col-md-12">
                             <div class="form-check form-switch bg-white p-3 border rounded-3 d-flex align-items-center gap-3 shadow-sm">
@@ -155,6 +189,32 @@
                             }
                         </div>
                     </div>
+
+                    <!-- Secțiune Evenimente Recurente -->
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">
+                            <i class="bi bi-arrow-repeat text-primary me-1"></i>Repeat
+                        </label>
+                        <InputSelect class="form-select" @bind-Value="recurrenceType">
+                            <option value="@RecurrenceType.None">Does not repeat</option>
+                            <option value="@RecurrenceType.Daily">Daily (every day)</option>
+                            <option value="@RecurrenceType.Weekdays">Weekdays (Monday – Friday)</option>
+                            <option value="@RecurrenceType.Weekly">Weekly (same day each week)</option>
+                            <option value="@RecurrenceType.Monthly">Monthly (same day each month)</option>
+                        </InputSelect>
+                    </div>
+
+                    @if (recurrenceType != RecurrenceType.None)
+                    {
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Repeat Until</label>
+                            <InputDate Type="InputDateType.Date" class="form-control" @bind-Value="recurrenceEndDate" />
+                            <div class="form-text fs-9">
+                                Generates occurrences from @newEvent.StartTime.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) through @recurrenceEndDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) (max 180 occurrences).
+                            </div>
+                        </div>
+                    }
+
                     <div class="col-md-12">
                         <label class="form-label small fw-bold">Description</label>
                         <InputTextArea class="form-control" @bind-Value="newEvent.Description" rows="2" placeholder="Optional details..." />
@@ -162,7 +222,7 @@
                     <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-outline-secondary px-3" @onclick="CloseAddModal" disabled="@isSaving">Cancel</button>
                         <button type="submit" class="btn btn-success px-4" disabled="@isSaving">
-                            @(isSaving ? "Saving..." : "Save & Invite")
+                            @(isSaving ? "Saving..." : (recurrenceType != RecurrenceType.None ? "Save Series & Invite" : "Save & Invite"))
                         </button>
                     </div>
                 </div>
@@ -170,13 +230,68 @@
         </div>
     }
 
+    <!-- RECURRING DELETE CONFIRMATION MODAL -->
+    @if (showDeleteSeriesModal && pendingDeleteEvent != null)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg rounded-4">
+                    <div class="modal-header border-bottom-0 pb-0">
+                        <h5 class="fw-bold text-dark mb-0">
+                            <i class="bi bi-arrow-repeat text-danger me-2"></i>Delete Recurring Event
+                        </h5>
+                        <button type="button" class="btn-close" @onclick="CancelDeleteSeriesModal" disabled="@isDeleting"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <p class="text-dark mb-2">
+                            <strong>@pendingDeleteEvent.Title</strong> (@pendingDeleteEvent.StartTime.ToString("dd MMM yyyy, HH:mm", CultureInfo.InvariantCulture)) appears to be part of a recurring series.
+                        </p>
+                        <p class="text-muted small mb-4">
+                            Do you want to delete only this occurrence or every occurrence in the series?
+                        </p>
+                        <div class="d-flex flex-column gap-2">
+                            <button type="button"
+                                    class="btn btn-outline-danger text-start d-flex justify-content-between align-items-center px-3 py-2"
+                                    @onclick="() => ConfirmDeleteOccurrenceAsync(pendingDeleteEvent.Id, deleteEntireSeries: false)"
+                                    disabled="@isDeleting">
+                                <span>
+                                    <i class="bi bi-calendar-event me-2"></i>
+                                    <strong>Only this occurrence</strong>
+                                </span>
+                                <span class="badge bg-light text-danger border">This day</span>
+                            </button>
+                            <button type="button"
+                                    class="btn btn-danger text-start d-flex justify-content-between align-items-center px-3 py-2"
+                                    @onclick="() => ConfirmDeleteOccurrenceAsync(pendingDeleteEvent.Id, deleteEntireSeries: true)"
+                                    disabled="@isDeleting">
+                                <span>
+                                    <i class="bi bi-arrow-repeat me-2"></i>
+                                    <strong>All events in series</strong>
+                                </span>
+                                <span class="badge bg-white text-danger">Entire series</span>
+                            </button>
+                            <button type="button"
+                                    class="btn btn-link text-secondary btn-sm mt-1 text-decoration-none"
+                                    @onclick="CancelDeleteSeriesModal"
+                                    disabled="@isDeleting">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <!-- EVENT DETAILS POPUP -->
     @if (showDetailsModal && viewingEvent != null)
     {
         var isOwner = viewingEvent.CreatedById == Guid.Empty || viewingEvent.CreatedById.ToString() == currentEmployeeId;
+        var currentRsvp = ExtractRsvpStatus(viewingEvent.Description);
+        var cleanDescription = StripRsvpTag(viewingEvent.Description);
 
         <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content border-0 shadow-lg rounded-4">
                     <div class="modal-header border-bottom-0 pb-0">
                         <h5 class="fw-bold text-dark mb-0">
@@ -185,9 +300,9 @@
                         <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
                     </div>
                     <div class="modal-body p-4">
-                        <div class="mb-3 d-flex align-items-center gap-2">
+                        <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
                             <span class="badge @GetBadgeClass(viewingEvent.Priority)">@viewingEvent.Category</span>
-                            @if (viewingEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
+                            @if (IsMeetingCategory(viewingEvent.Category))
                             {
                                 @if (viewingEvent.IsOnline == true)
                                 {
@@ -197,6 +312,12 @@
                                 {
                                     <span class="badge bg-secondary"><i class="bi bi-geo-alt me-1"></i>Offline Meeting</span>
                                 }
+                            }
+                            @if (!isOwner)
+                            {
+                                <span class="badge @GetRsvpBadgeClass(currentRsvp)">
+                                    RSVP: @currentRsvp
+                                </span>
                             }
                         </div>
                         <h4 class="fw-bold text-dark mb-3">@viewingEvent.Title</h4>
@@ -211,7 +332,48 @@
                             </div>
                         </div>
 
-                        @if (viewingEvent.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true)
+                        @if (!isOwner && viewingEvent.CreatedById != Guid.Empty)
+                        {
+                            <div class="bg-light border rounded-3 p-3 mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase d-block mb-2">
+                                    <i class="bi bi-reply-fill me-1 text-primary"></i>Your Invitation Response
+                                </label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button"
+                                            class="btn btn-sm @(currentRsvp == RsvpStatus.Accepted ? "btn-success" : "btn-outline-success")"
+                                            disabled="@isUpdatingRsvp"
+                                            @onclick="() => RespondToInvitationAsync(viewingEvent, RsvpStatus.Accepted)">
+                                        <i class="bi bi-check-lg me-1"></i>Accept
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm @(currentRsvp == RsvpStatus.Declined ? "btn-danger" : "btn-outline-danger")"
+                                            disabled="@isUpdatingRsvp"
+                                            @onclick="() => RespondToInvitationAsync(viewingEvent, RsvpStatus.Declined)">
+                                        <i class="bi bi-x-lg me-1"></i>Decline
+                                    </button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (isOwner && viewingInvitees.Any())
+                        {
+                            <div class="bg-light border rounded-3 p-3 mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase d-block mb-2">
+                                    <i class="bi bi-people-fill me-1 text-primary"></i>Invitees & Status (@viewingInvitees.Count)
+                                </label>
+                                <div class="d-flex flex-column gap-2" style="max-height: 150px; overflow-y: auto;">
+                                    @foreach (var inv in viewingInvitees)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center bg-white border rounded-2 px-3 py-2 small">
+                                            <span class="text-dark fw-semibold text-truncate me-2">@inv.DisplayName</span>
+                                            <span class="badge @GetRsvpBadgeClass(inv.Status) flex-shrink-0">@inv.Status</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (IsMeetingCategory(viewingEvent.Category))
                         {
                             @if (viewingEvent.IsOnline == true)
                             {
@@ -245,15 +407,105 @@
 
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-muted text-uppercase">Description</label>
-                            <p class="text-dark bg-white border p-3 rounded-3 mb-0" style="min-height: 70px;">
-                                @(!string.IsNullOrEmpty(viewingEvent.Description) ? viewingEvent.Description : "No description provided.")
+                            <p class="text-dark bg-white border p-3 rounded-3 mb-0" style="min-height: 60px; white-space: pre-line;">
+                                @(!string.IsNullOrEmpty(cleanDescription) ? cleanDescription : "No description provided.")
                             </p>
                         </div>
+
+                        <!-- MEETING NOTES & ACTION ITEMS -->
+                        @if (IsMeetingCategory(viewingEvent.Category))
+                        {
+                            <div class="bg-light border rounded-3 p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label small fw-bold text-primary text-uppercase mb-0">
+                                        <i class="bi bi-journal-text me-1"></i>Meeting Notes & Recap
+                                    </label>
+                                    @if (!string.IsNullOrEmpty(recapStatusMessage))
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">@recapStatusMessage</span>
+                                    }
+                                </div>
+
+                                <textarea class="form-control form-control-sm bg-white mb-2"
+                                          rows="3"
+                                          placeholder="Write key decisions, summary, or follow-up notes after the meeting..."
+                                          @bind="meetingNotesDraft"></textarea>
+
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button"
+                                            class="btn btn-primary btn-sm px-3"
+                                            disabled="@isSavingRecap"
+                                            @onclick="SaveMeetingNotesAsync">
+                                        <i class="bi bi-save me-1"></i>@(isSavingRecap ? "Saving..." : "Save Meeting Notes")
+                                    </button>
+                                </div>
+
+                                <hr class="my-3" />
+
+                                <label class="form-label small fw-bold text-dark text-uppercase d-block mb-2">
+                                    <i class="bi bi-check2-square me-1 text-success"></i>Action Items (Create Task in Calendar)
+                                </label>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-5">
+                                        <input type="text"
+                                               class="form-control form-control-sm bg-white"
+                                               placeholder="Action item / follow-up task..."
+                                               @bind="actionItemTitle" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <select class="form-select form-select-sm bg-white" @bind="actionItemAssigneeId">
+                                            <option value="">Assignee: Myself</option>
+                                            @foreach (var emp in allEmployees)
+                                            {
+                                                <option value="@emp.Id">@(emp.Email ?? emp.UserName)</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="datetime-local"
+                                               class="form-control form-control-sm bg-white"
+                                               @bind="actionItemDueDate" />
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button"
+                                            class="btn btn-success btn-sm px-3"
+                                            disabled="@(isCreatingActionItem || string.IsNullOrWhiteSpace(actionItemTitle))"
+                                            @onclick="AddActionItemAsTaskAsync">
+                                        <i class="bi bi-plus-lg me-1"></i>@(isCreatingActionItem ? "Adding..." : "Add Action Item & Create Task")
+                                    </button>
+                                </div>
+
+                                @if (meetingActionItems.Any())
+                                {
+                                    <div class="d-flex flex-column gap-2 mt-2">
+                                        @foreach (var item in meetingActionItems)
+                                        {
+                                            <div class="d-flex justify-content-between align-items-center bg-white border rounded-2 px-3 py-2 small">
+                                                <div class="me-2">
+                                                    <div class="fw-semibold text-dark">@item.Title</div>
+                                                    <div class="text-muted fs-9">
+                                                        Assignee: <strong>@item.AssigneeName</strong> • Due: @item.DueDate.ToString("dd MMM yyyy, HH:mm", CultureInfo.InvariantCulture)
+                                                    </div>
+                                                </div>
+                                                <span class="badge bg-primary flex-shrink-0">Task</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-muted small fst-italic">No action items recorded for this meeting yet.</div>
+                                }
+                            </div>
+                        }
 
                         <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                             <span class="small text-muted">
                                 <i class="bi bi-shield-lock me-1"></i>
-                                @(isOwner ? "Organizer (Full Control)" : "Invited Event (Read-only)")
+                                @(isOwner ? "Organizer (Full Control)" : "Invited Event")
                             </span>
 
                             <div class="d-flex gap-2">
@@ -274,7 +526,7 @@
 
     <!-- TEAMS STYLE TIME GRID CALENDAR -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-        <div class="calendar-header-grid border-bottom bg-light" style="grid-template-columns: 70px repeat(@displayedDays.Count, 1fr);">
+        <div class="calendar-header-grid border-bottom bg-light" style="grid-template-columns: 70px repeat(@displayedDays.Count, minmax(0, 1fr));">
             <div class="time-col-header border-end text-muted small fw-bold text-center py-3">Time</div>
             @foreach (var day in displayedDays)
             {
@@ -303,7 +555,8 @@
                         var targetSlotTime = new DateTime(day.Year, day.Month, day.Day, hour, 0, 0);
                         var slotEvents = eventsList
                         .Where(e => e.StartTime.Date == day.Date && e.StartTime.Hour == hour &&
-                        (string.IsNullOrEmpty(e.Category) || selectedCategories.Contains(e.Category)))
+                        (string.IsNullOrEmpty(e.Category) || selectedCategories.Contains(e.Category)) &&
+                        (!onlyEventsWithDeclinedInvitees || eventsWithDeclinedInvitees.Contains(GetEventSeriesOrSlotKey(e))))
                         .ToList();
 
                         var isTargetable = selectedEventId != Guid.Empty;
@@ -325,56 +578,72 @@
                                 var isSelected = selectedEventId == ev.Id;
                                 var isOwner = ev.CreatedById == Guid.Empty || ev.CreatedById.ToString() == currentEmployeeId;
                                 var isPast = ev.EndTime < staticNow;
+                                var rsvp = ExtractRsvpStatus(ev.Description);
+                                var hasDeclined = isOwner && eventsWithDeclinedInvitees.Contains(GetEventSeriesOrSlotKey(ev));
 
-                                <div class="p-2 mb-1 rounded-3 shadow-sm border-start border-4 position-relative event-item @(isPast ? "event-past bg-white opacity-75" : "bg-light") @(isSelected ? "event-selected" : "")"
+                                <div class="p-1 px-2 mb-1 rounded-2 shadow-sm border-start border-3 event-item @(isPast ? "event-past bg-white opacity-75" : "bg-light") @(isSelected ? "event-selected" : "") @(rsvp == RsvpStatus.Declined ? "opacity-50" : "")"
                                      style="border-color: @(isPast ? "#cbd5e1" : GetPriorityColor(ev.Priority)) !important;"
                                      @onclick="() => SelectEvent(ev.Id, isOwner)"
                                      @onclick:stopPropagation="true"
-                                     title="@(isOwner ? "Click to select and move" : "Invited event (read-only)")">
+                                     title="@($"{ev.Title} ({ev.StartTime:HH:mm} - {ev.EndTime:HH:mm}){(!isOwner ? $" • {rsvp}" : (hasDeclined ? " • Has declined invitee(s)" : ""))}")">
 
-                                    <div class="position-absolute top-0 end-0 mt-1 me-1 d-flex gap-1 z-3">
-                                        <button class="btn btn-sm btn-light border text-primary p-0 d-flex align-items-center justify-content-center"
-                                                style="width: 18px; height: 18px; font-size: 0.65rem;"
-                                                @onclick="() => OpenDetailsModal(ev)"
-                                                @onclick:stopPropagation="true"
-                                                title="View details">
-                                            <i class="bi bi-info-lg"></i>
-                                        </button>
+                                    <div class="d-flex justify-content-between align-items-start gap-1">
+                                        <div class="event-content">
+                                            <div class="text-dark fs-8 fw-semibold text-truncate @(isPast || rsvp == RsvpStatus.Declined ? "text-decoration-line-through text-muted" : "")">
+                                                @if (IsMeetingCategory(ev.Category) && ev.IsOnline == true)
+                                                {
+                                                    <i class="bi bi-laptop text-info me-1" title="Online Meeting"></i>
+                                                }
+                                                @if (isPast)
+                                                {
+                                                    <i class="bi bi-check2-all text-success me-1" title="Completed"></i>
+                                                }
+                                                @if (isSelected)
+                                                {
+                                                    <i class="bi bi-cursor-fill text-primary me-1"></i>
+                                                }
+                                                @if (!isOwner)
+                                                {
+                                                    <i class="bi @GetRsvpIconClass(rsvp) me-1" title="RSVP: @rsvp"></i>
+                                                }
+                                                else if (hasDeclined)
+                                                {
+                                                    <i class="bi bi-person-x-fill text-danger me-1" title="Has declined invitee(s)"></i>
+                                                }
+                                                @ev.Title
+                                            </div>
+                                            <div class="fs-9 text-muted font-monospace text-truncate">
+                                                @ev.StartTime.ToString("HH:mm") - @ev.EndTime.ToString("HH:mm")
+                                                @if (!isOwner)
+                                                {
+                                                    <span>• @rsvp</span>
+                                                }
+                                                else if (hasDeclined)
+                                                {
+                                                    <span class="text-danger">• Declined</span>
+                                                }
+                                            </div>
+                                        </div>
 
-                                        @if (isOwner)
-                                        {
-                                            <button class="btn btn-sm btn-light border text-danger p-0 d-flex align-items-center justify-content-center"
-                                                    style="width: 18px; height: 18px; font-size: 0.65rem;"
-                                                    @onclick="() => DeleteEvent(ev.Id)"
+                                        <div class="d-flex gap-1 flex-shrink-0">
+                                            <button type="button"
+                                                    class="btn btn-sm btn-light border text-primary p-0 d-flex align-items-center justify-content-center event-action-btn"
+                                                    @onclick="() => OpenDetailsModal(ev)"
                                                     @onclick:stopPropagation="true"
-                                                    title="Delete event">
-                                                <i class="bi bi-x"></i>
+                                                    title="View details, notes & RSVP">
+                                                <i class="bi bi-info-lg"></i>
                                             </button>
-                                        }
-                                    </div>
 
-                                    <div class="pe-4">
-                                        <strong class="text-dark fs-8 text-truncate d-block @(isPast ? "text-decoration-line-through text-muted" : "")">
-                                            @if (ev.Category?.Equals("Meeting", StringComparison.OrdinalIgnoreCase) == true && ev.IsOnline == true)
+                                            @if (isOwner)
                                             {
-                                                <i class="bi bi-laptop text-info me-1" title="Online Meeting"></i>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-light border text-danger p-0 d-flex align-items-center justify-content-center event-action-btn"
+                                                        @onclick="() => RequestDeleteEvent(ev)"
+                                                        @onclick:stopPropagation="true"
+                                                        title="Delete event">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
                                             }
-                                            @if (isPast)
-                                            {
-                                                <i class="bi bi-check2-all text-success me-1" title="Completed"></i>
-                                            }
-                                            @if (isSelected)
-                                            {
-                                                <i class="bi bi-cursor-fill text-primary me-1 animate-bounce"></i>
-                                            }
-                                            @if (!isOwner)
-                                            {
-                                                <i class="bi bi-people-fill text-secondary me-1" title="Invited event"></i>
-                                            }
-                                            @ev.Title
-                                        </strong>
-                                        <div class="fs-9 text-muted font-monospace">
-                                            @ev.StartTime.ToString("HH:mm") - @ev.EndTime.ToString("HH:mm")
                                         </div>
                                     </div>
                                 </div>
@@ -411,6 +680,11 @@
         display: grid;
     }
 
+    .day-col-header {
+        min-width: 0;
+        overflow: hidden;
+    }
+
     .calendar-row {
         min-height: 65px;
     }
@@ -422,9 +696,11 @@
     }
 
     .day-cell {
-        flex: 1;
+        flex: 1 1 0;
+        min-width: 0;
         min-height: 65px;
         background-color: #ffffff;
+        overflow: hidden;
         transition: background-color 0.15s ease;
     }
 
@@ -435,7 +711,10 @@
 
     .event-item {
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
@@ -444,6 +723,19 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
             z-index: 10;
         }
+
+    .event-content {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .event-action-btn {
+        width: 16px;
+        height: 16px;
+        font-size: 0.6rem;
+        line-height: 1;
+    }
 
     .event-past {
         background-color: #f8fafc !important;
@@ -511,7 +803,25 @@
 
 @code {
     private enum CalendarViewMode { Day, WorkWeek, FullWeek }
+    private enum RecurrenceType { None, Daily, Weekdays, Weekly, Monthly }
+    private enum RsvpStatus { Pending, Accepted, Declined }
+
+    private sealed record InviteeRsvpItem(string DisplayName, RsvpStatus Status);
+
+    private sealed class MeetingActionItemRecord
+    {
+        public string Title { get; set; } = string.Empty;
+        public string AssigneeName { get; set; } = string.Empty;
+        public DateTime DueDate { get; set; }
+    }
+
+    private static readonly Regex RsvpTagRegex = new(@"\[RSVP:(Pending|Accepted|Declined)\]\s*$", RegexOptions.Compiled);
+    private static readonly Regex MeetingNotesSectionRegex = new(@"--- MEETING NOTES ---\r?\n(.*?)\r?\n--- END MEETING NOTES ---", RegexOptions.Singleline | RegexOptions.Compiled);
+    private static readonly Regex ActionItemsSectionRegex = new(@"--- ACTION ITEMS ---\r?\n(.*?)\r?\n--- END ACTION ITEMS ---", RegexOptions.Singleline | RegexOptions.Compiled);
+
     private CalendarViewMode currentViewMode = CalendarViewMode.FullWeek;
+    private RecurrenceType recurrenceType = RecurrenceType.None;
+    private DateTime recurrenceEndDate = DateTime.Today.AddMonths(1);
 
     private List<CalendarEvent> eventsList = new();
     private List<Employee> allEmployees = new();
@@ -521,14 +831,33 @@
 
     private List<string> availableCategories = new();
     private HashSet<string> selectedCategories = new(StringComparer.OrdinalIgnoreCase);
+    private bool onlyEventsWithDeclinedInvitees = false;
+    private HashSet<string> eventsWithDeclinedInvitees = new(StringComparer.Ordinal);
 
     private bool showAddModal = false;
     private bool showDetailsModal = false;
+    private bool showDeleteSeriesModal = false;
     private bool isSaving = false;
+    private bool isDeleting = false;
+    private bool isUpdatingRsvp = false;
+    private bool isSavingRecap = false;
+    private bool isCreatingActionItem = false;
+    private string formErrorMessage = string.Empty;
+    private string recapStatusMessage = string.Empty;
+    private string selectedCategoryOption = "Meeting";
+    private string customCategory = string.Empty;
     private CalendarEvent? viewingEvent = null;
+    private List<InviteeRsvpItem> viewingInvitees = new();
+    private CalendarEvent? pendingDeleteEvent = null;
     private CalendarEvent newEvent = new();
     private string currentEmployeeId = string.Empty;
     private Guid selectedEventId = Guid.Empty;
+
+    private string meetingNotesDraft = string.Empty;
+    private string actionItemTitle = string.Empty;
+    private string actionItemAssigneeId = string.Empty;
+    private DateTime actionItemDueDate = DateTime.Today.AddDays(1).AddHours(9);
+    private List<MeetingActionItemRecord> meetingActionItems = new();
 
     private System.Timers.Timer? alertTimer;
     private HashSet<Guid> alerted10Min = new();
@@ -536,6 +865,108 @@
 
     private string toastMessage = string.Empty;
     private string toastType = "success";
+
+    private string EffectiveCategory =>
+        string.Equals(selectedCategoryOption, "Other", StringComparison.OrdinalIgnoreCase)
+            ? (string.IsNullOrWhiteSpace(customCategory) ? "Task" : customCategory.Trim())
+            : selectedCategoryOption;
+
+    private bool IsMeetingCategory(string? category)
+    {
+        return !string.IsNullOrWhiteSpace(category) &&
+               category.Trim().Equals("Meeting", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static RsvpStatus ExtractRsvpStatus(string? description)
+    {
+        if (string.IsNullOrEmpty(description)) return RsvpStatus.Pending;
+        var match = RsvpTagRegex.Match(description);
+        if (match.Success && Enum.TryParse<RsvpStatus>(match.Groups[1].Value, out var parsed))
+        {
+            return parsed;
+        }
+        return RsvpStatus.Pending;
+    }
+
+    private static string ExtractMeetingNotes(string? description)
+    {
+        if (string.IsNullOrEmpty(description)) return string.Empty;
+        var match = MeetingNotesSectionRegex.Match(description);
+        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+    }
+
+    private static List<MeetingActionItemRecord> ExtractActionItems(string? description)
+    {
+        if (string.IsNullOrEmpty(description)) return new List<MeetingActionItemRecord>();
+        var match = ActionItemsSectionRegex.Match(description);
+        if (!match.Success) return new List<MeetingActionItemRecord>();
+
+        try
+        {
+            var items = JsonSerializer.Deserialize<List<MeetingActionItemRecord>>(match.Groups[1].Value.Trim());
+            return items ?? new List<MeetingActionItemRecord>();
+        }
+        catch
+        {
+            return new List<MeetingActionItemRecord>();
+        }
+    }
+
+    private static string StripRsvpTag(string? description)
+    {
+        if (string.IsNullOrEmpty(description)) return string.Empty;
+        var withoutRsvp = RsvpTagRegex.Replace(description, string.Empty);
+        var withoutNotes = MeetingNotesSectionRegex.Replace(withoutRsvp, string.Empty);
+        var withoutActions = ActionItemsSectionRegex.Replace(withoutNotes, string.Empty);
+        return withoutActions.Trim();
+    }
+
+    private static string ComposeDescription(
+        string? baseDescription,
+        string? notes,
+        List<MeetingActionItemRecord>? actionItems,
+        RsvpStatus? rsvpStatus)
+    {
+        var cleanBase = StripRsvpTag(baseDescription);
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(cleanBase))
+        {
+            parts.Add(cleanBase.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(notes))
+        {
+            parts.Add($"--- MEETING NOTES ---\n{notes.Trim()}\n--- END MEETING NOTES ---");
+        }
+
+        if (actionItems != null && actionItems.Any())
+        {
+            var json = JsonSerializer.Serialize(actionItems);
+            parts.Add($"--- ACTION ITEMS ---\n{json}\n--- END ACTION ITEMS ---");
+        }
+
+        if (rsvpStatus.HasValue)
+        {
+            parts.Add($"[RSVP:{rsvpStatus.Value}]");
+        }
+
+        return string.Join("\n", parts);
+    }
+
+    private static string ApplyRsvpTag(string? description, RsvpStatus status)
+    {
+        return ComposeDescription(
+            description,
+            ExtractMeetingNotes(description),
+            ExtractActionItems(description),
+            status);
+    }
+
+    private static string GetEventSeriesOrSlotKey(CalendarEvent ev)
+    {
+        return $"{ev.CreatedById}|{(ev.Title ?? string.Empty).Trim()}|{(ev.Category ?? string.Empty).Trim()}|{ev.StartTime:yyyy-MM-dd HH:mm}|{ev.EndTime:yyyy-MM-dd HH:mm}";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -566,7 +997,7 @@
 
         foreach (var ev in eventsList)
         {
-            if (string.IsNullOrEmpty(ev.Category) || !ev.Category.Equals("Meeting", StringComparison.OrdinalIgnoreCase))
+            if (!IsMeetingCategory(ev.Category))
             {
                 continue;
             }
@@ -684,16 +1115,32 @@
         var endDate = displayedDays.Last().AddDays(30);
 
         var rawEvents = await db.CalendarEvent
-            .Where(e => (e.EmployeeId.ToString() == currentEmployeeId || e.CreatedById.ToString() == currentEmployeeId)
-                     && e.EndTime >= startDate && e.StartTime <= endDate)
+            .Where(e => e.EndTime >= startDate && e.StartTime <= endDate &&
+                        (e.EmployeeId.ToString() == currentEmployeeId ||
+                         (e.CreatedById.ToString() == currentEmployeeId &&
+                          e.Category != null &&
+                          e.Category.ToLower() != "task")))
             .OrderBy(e => e.StartTime)
             .ToListAsync();
 
-        // Elimină eventualele duplicate pe același titlu și interval orar
+        var declinedKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in rawEvents)
+        {
+            if (item.CreatedById != Guid.Empty &&
+                item.EmployeeId != item.CreatedById &&
+                ExtractRsvpStatus(item.Description) == RsvpStatus.Declined)
+            {
+                declinedKeys.Add(GetEventSeriesOrSlotKey(item));
+            }
+        }
+        eventsWithDeclinedInvitees = declinedKeys;
+
         eventsList = rawEvents
             .GroupBy(e => new { e.Title, e.StartTime, e.EndTime, e.Category })
-            .Select(g => g.First())
+            .Select(g => g.FirstOrDefault(x => x.EmployeeId.ToString() == currentEmployeeId) ?? g.First())
             .ToList();
+
+        var previousCategories = new HashSet<string>(selectedCategories, StringComparer.OrdinalIgnoreCase);
 
         availableCategories = eventsList
             .Select(e => e.Category)
@@ -701,18 +1148,34 @@
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList()!;
 
-        if (!selectedCategories.Any() && availableCategories.Any())
+        if (!previousCategories.Any() && availableCategories.Any())
         {
             selectedCategories = new HashSet<string>(availableCategories, StringComparer.OrdinalIgnoreCase);
         }
+        else
+        {
+            var knownInView = previousCategories.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var cat in availableCategories)
+            {
+                if (!knownInView.Contains(cat))
+                {
+                    selectedCategories.Add(cat);
+                }
+            }
+        }
     }
-
     private void ToggleCategoryFilter(string category)
     {
         if (!selectedCategories.Remove(category))
         {
             selectedCategories.Add(category);
         }
+    }
+
+    private Task ToggleOnlyDeclinedFilterAsync()
+    {
+        onlyEventsWithDeclinedInvitees = !onlyEventsWithDeclinedInvitees;
+        return Task.CompletedTask;
     }
 
     private void ToggleEmployeeSelection(Guid empId)
@@ -728,6 +1191,11 @@
         var now = DateTime.Now;
         var roundedStart = new DateTime(now.Year, now.Month, now.Day, Math.Clamp(now.Hour, 8, 19), 0, 0);
 
+        formErrorMessage = string.Empty;
+        selectedCategoryOption = "Meeting";
+        customCategory = string.Empty;
+        recurrenceType = RecurrenceType.None;
+        recurrenceEndDate = roundedStart.Date.AddMonths(1);
         newEvent = new CalendarEvent
             {
                 StartTime = roundedStart,
@@ -741,16 +1209,116 @@
 
     private void CloseAddModal()
     {
+        formErrorMessage = string.Empty;
+        customCategory = string.Empty;
+        recurrenceType = RecurrenceType.None;
         showAddModal = false;
         selectedEmployeeIds.Clear();
+    }
+
+    private List<(DateTime Start, DateTime End)> BuildOccurrenceIntervals(
+        DateTime startTime,
+        TimeSpan duration,
+        RecurrenceType type,
+        DateTime untilDate)
+    {
+        var intervals = new List<(DateTime Start, DateTime End)>();
+
+        if (type == RecurrenceType.None)
+        {
+            intervals.Add((startTime, startTime + duration));
+            return intervals;
+        }
+
+        var clampedUntil = untilDate.Date < startTime.Date
+            ? startTime.Date
+            : (untilDate.Date > startTime.Date.AddYears(2) ? startTime.Date.AddYears(2) : untilDate.Date);
+
+        const int maxOccurrences = 180;
+
+        if (type == RecurrenceType.Monthly)
+        {
+            int monthOffset = 0;
+            while (intervals.Count < maxOccurrences)
+            {
+                var targetMonth = new DateTime(startTime.Year, startTime.Month, 1).AddMonths(monthOffset);
+                if (targetMonth.Date > clampedUntil)
+                {
+                    break;
+                }
+
+                int daysInMonth = DateTime.DaysInMonth(targetMonth.Year, targetMonth.Month);
+                int day = Math.Min(startTime.Day, daysInMonth);
+                var occStart = new DateTime(targetMonth.Year, targetMonth.Month, day, startTime.Hour, startTime.Minute, startTime.Second);
+
+                if (occStart.Date >= startTime.Date && occStart.Date <= clampedUntil)
+                {
+                    intervals.Add((occStart, occStart + duration));
+                }
+
+                monthOffset++;
+            }
+
+            return intervals;
+        }
+
+        for (var d = startTime.Date; d <= clampedUntil && intervals.Count < maxOccurrences; d = d.AddDays(1))
+        {
+            bool includeDay = type switch
+            {
+                RecurrenceType.Daily => true,
+                RecurrenceType.Weekdays => d.DayOfWeek != DayOfWeek.Saturday && d.DayOfWeek != DayOfWeek.Sunday,
+                RecurrenceType.Weekly => d.DayOfWeek == startTime.DayOfWeek,
+                _ => false
+            };
+
+            if (includeDay)
+            {
+                var occStart = new DateTime(d.Year, d.Month, d.Day, startTime.Hour, startTime.Minute, startTime.Second);
+                intervals.Add((occStart, occStart + duration));
+            }
+        }
+
+        return intervals;
+    }
+
+    private async Task<CalendarEvent?> FindConflictingMeetingAsync(
+        ChronusDbContext db,
+        IEnumerable<Guid> employeeIds,
+        DateTime startTime,
+        DateTime endTime,
+        Guid? excludeEventId = null)
+    {
+        var targetIds = employeeIds.Distinct().ToList();
+
+        var candidates = await db.CalendarEvent
+            .Where(e => targetIds.Contains(e.EmployeeId) &&
+                        e.Category != null &&
+                        e.Category.ToLower() == "meeting" &&
+                        e.StartTime < endTime &&
+                        e.EndTime > startTime)
+            .OrderBy(e => e.StartTime)
+            .ToListAsync();
+
+        return candidates.FirstOrDefault(e => !excludeEventId.HasValue || e.Id != excludeEventId.Value);
     }
 
     private async Task SaveEvent()
     {
         if (isSaving || string.IsNullOrWhiteSpace(newEvent.Title)) return;
-        if (newEvent.EndTime <= newEvent.StartTime)
+
+        formErrorMessage = string.Empty;
+
+        var normalizedCategory = EffectiveCategory;
+        var startTime = newEvent.StartTime;
+        var endTime = newEvent.EndTime <= newEvent.StartTime ? newEvent.StartTime.AddMinutes(30) : newEvent.EndTime;
+        var duration = endTime - startTime;
+
+        var occurrences = BuildOccurrenceIntervals(startTime, duration, recurrenceType, recurrenceEndDate);
+        if (!occurrences.Any())
         {
-            newEvent.EndTime = newEvent.StartTime.AddMinutes(30);
+            formErrorMessage = "Nu s-a putut genera nicio dată validă pentru intervalul de recurență selectat.";
+            return;
         }
 
         isSaving = true;
@@ -758,43 +1326,78 @@
         {
             using var db = await DbFactory.CreateDbContextAsync();
             var organizerId = Guid.Parse(currentEmployeeId);
+            var involvedEmployeeIds = selectedEmployeeIds
+                .Distinct()
+                .Append(organizerId)
+                .ToList();
 
-            var primaryEvent = new CalendarEvent
-                {
-                    Id = Guid.NewGuid(),
-                    Title = newEvent.Title.Trim(),
-                    Category = string.IsNullOrWhiteSpace(newEvent.Category) ? "Task" : newEvent.Category.Trim(),
-                    Priority = newEvent.Priority,
-                    Description = newEvent.Description,
-                    StartTime = newEvent.StartTime,
-                    EndTime = newEvent.EndTime,
-                    IsOnline = newEvent.IsOnline,
-                    EmployeeId = organizerId,
-                    CreatedById = organizerId
-                };
-
-            db.CalendarEvent.Add(primaryEvent);
-
-            foreach (var invitedId in selectedEmployeeIds.Distinct().Where(id => id != organizerId))
+            if (IsMeetingCategory(normalizedCategory))
             {
-                db.CalendarEvent.Add(new CalendarEvent
+                foreach (var occ in occurrences)
+                {
+                    var conflictingMeeting = await FindConflictingMeetingAsync(db, involvedEmployeeIds, occ.Start, occ.End);
+                    if (conflictingMeeting != null)
+                    {
+                        formErrorMessage = $"Conflict pe {occ.Start:dd MMM yyyy}: există deja meeting-ul \"{conflictingMeeting.Title}\" ({conflictingMeeting.StartTime:HH:mm} - {conflictingMeeting.EndTime:HH:mm}). În acest interval poți adăuga doar Task-uri sau alte activități non-meeting.";
+                        return;
+                    }
+                }
+            }
+
+            var cleanDesc = StripRsvpTag(newEvent.Description);
+
+            foreach (var occ in occurrences)
+            {
+                var primaryEvent = new CalendarEvent
                     {
                         Id = Guid.NewGuid(),
-                        Title = primaryEvent.Title,
-                        Category = primaryEvent.Category,
-                        Priority = primaryEvent.Priority,
-                        Description = primaryEvent.Description,
-                        StartTime = primaryEvent.StartTime,
-                        EndTime = primaryEvent.EndTime,
-                        IsOnline = primaryEvent.IsOnline,
-                        EmployeeId = invitedId,
+                        Title = newEvent.Title.Trim(),
+                        Category = normalizedCategory,
+                        Priority = newEvent.Priority,
+                        Description = string.IsNullOrEmpty(cleanDesc) ? null : cleanDesc,
+                        StartTime = occ.Start,
+                        EndTime = occ.End,
+                        IsOnline = IsMeetingCategory(normalizedCategory) ? newEvent.IsOnline : null,
+                        EmployeeId = organizerId,
                         CreatedById = organizerId
-                    });
+                    };
+
+                db.CalendarEvent.Add(primaryEvent);
+
+                foreach (var invitedId in selectedEmployeeIds.Distinct().Where(id => id != organizerId))
+                {
+                    db.CalendarEvent.Add(new CalendarEvent
+                        {
+                            Id = Guid.NewGuid(),
+                            Title = primaryEvent.Title,
+                            Category = primaryEvent.Category,
+                            Priority = primaryEvent.Priority,
+                            Description = ComposeDescription(cleanDesc, null, null, RsvpStatus.Pending),
+                            StartTime = primaryEvent.StartTime,
+                            EndTime = primaryEvent.EndTime,
+                            IsOnline = primaryEvent.IsOnline,
+                            EmployeeId = invitedId,
+                            CreatedById = organizerId
+                        });
+                }
             }
 
             await db.SaveChangesAsync();
+
+            var firstOccDate = occurrences.First().Start.Date;
+            if (!displayedDays.Any(d => d.Date == firstOccDate))
+            {
+                currentDate = firstOccDate;
+                UpdateDisplayedDays();
+            }
+
+            selectedCategories.Add(normalizedCategory);
             await LoadEventsAsync();
             CloseAddModal();
+        }
+        catch (Exception ex)
+        {
+            formErrorMessage = $"Eroare la salvare: {ex.Message}";
         }
         finally
         {
@@ -802,16 +1405,219 @@
         }
     }
 
-    private void OpenDetailsModal(CalendarEvent ev)
+    private async Task OpenDetailsModal(CalendarEvent ev)
     {
         viewingEvent = ev;
+        viewingInvitees.Clear();
+        recapStatusMessage = string.Empty;
+        meetingNotesDraft = ExtractMeetingNotes(ev.Description);
+        meetingActionItems = ExtractActionItems(ev.Description);
+        actionItemTitle = string.Empty;
+        actionItemAssigneeId = currentEmployeeId;
+
+        var defaultDue = ev.EndTime.Date >= DateTime.Today
+            ? new DateTime(ev.EndTime.Date.AddDays(1).Year, ev.EndTime.Date.AddDays(1).Month, ev.EndTime.Date.AddDays(1).Day, Math.Clamp(ev.EndTime.Hour, 9, 17), 0, 0)
+            : DateTime.Today.AddDays(1).AddHours(9);
+        actionItemDueDate = defaultDue;
+
         showDetailsModal = true;
+
+        var isOwner = ev.CreatedById == Guid.Empty || ev.CreatedById.ToString() == currentEmployeeId;
+        if (isOwner && ev.CreatedById != Guid.Empty)
+        {
+            await LoadInviteesForEventAsync(ev);
+        }
+    }
+
+    private async Task SaveMeetingNotesAsync()
+    {
+        if (viewingEvent == null || isSavingRecap) return;
+        isSavingRecap = true;
+        recapStatusMessage = string.Empty;
+
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var dbEvent = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == viewingEvent.Id);
+            if (dbEvent == null) return;
+
+            var isOwner = dbEvent.CreatedById == Guid.Empty || dbEvent.CreatedById.ToString() == currentEmployeeId;
+            RsvpStatus? rsvp = isOwner ? null : ExtractRsvpStatus(dbEvent.Description);
+
+            dbEvent.Description = ComposeDescription(
+                dbEvent.Description,
+                meetingNotesDraft,
+                meetingActionItems,
+                rsvp);
+
+            await db.SaveChangesAsync();
+            viewingEvent = dbEvent;
+            recapStatusMessage = "Notes saved";
+            await LoadEventsAsync();
+        }
+        finally
+        {
+            isSavingRecap = false;
+        }
+    }
+
+    private async Task AddActionItemAsTaskAsync()
+    {
+        if (viewingEvent == null || isCreatingActionItem || string.IsNullOrWhiteSpace(actionItemTitle)) return;
+        isCreatingActionItem = true;
+        recapStatusMessage = string.Empty;
+
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+
+            var creatorGuid = Guid.TryParse(currentEmployeeId, out var parsedCurrent)
+                ? parsedCurrent
+                : (viewingEvent.CreatedById != Guid.Empty ? viewingEvent.CreatedById : viewingEvent.EmployeeId);
+
+            var assigneeGuid = Guid.TryParse(actionItemAssigneeId, out var parsedAssignee)
+                ? parsedAssignee
+                : creatorGuid;
+
+            var assigneeEmp = allEmployees.FirstOrDefault(e => e.Id == assigneeGuid);
+            var assigneeLabel = assigneeEmp?.Email ?? assigneeEmp?.UserName ?? "Assigned";
+
+            var dueStart = actionItemDueDate;
+            var dueEnd = dueStart.AddMinutes(30);
+
+            var taskEvent = new CalendarEvent
+                {
+                    Id = Guid.NewGuid(),
+                    Title = actionItemTitle.Trim(),
+                    Category = "Task",
+                    Priority = viewingEvent.Priority,
+                    Description = $"Action item from meeting \"{viewingEvent.Title}\" ({viewingEvent.StartTime:dd MMM yyyy}).",
+                    StartTime = dueStart,
+                    EndTime = dueEnd,
+                    EmployeeId = assigneeGuid,
+                    CreatedById = creatorGuid
+                };
+
+            db.CalendarEvent.Add(taskEvent);
+
+            var updatedItems = new List<MeetingActionItemRecord>(meetingActionItems)
+            {
+                new MeetingActionItemRecord
+                {
+                    Title = actionItemTitle.Trim(),
+                    AssigneeName = assigneeLabel,
+                    DueDate = dueStart
+                }
+            };
+
+            var dbMeeting = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == viewingEvent.Id);
+            if (dbMeeting != null)
+            {
+                var isOwner = dbMeeting.CreatedById == Guid.Empty || dbMeeting.CreatedById.ToString() == currentEmployeeId;
+                RsvpStatus? rsvp = isOwner ? null : ExtractRsvpStatus(dbMeeting.Description);
+
+                dbMeeting.Description = ComposeDescription(
+                    dbMeeting.Description,
+                    meetingNotesDraft,
+                    updatedItems,
+                    rsvp);
+
+                viewingEvent = dbMeeting;
+            }
+
+            await db.SaveChangesAsync();
+
+            meetingActionItems = updatedItems;
+            actionItemTitle = string.Empty;
+            recapStatusMessage = "Action item & Task created";
+            selectedCategories.Add("Task");
+
+            if (!displayedDays.Any(d => d.Date == dueStart.Date))
+            {
+                currentDate = dueStart.Date;
+                UpdateDisplayedDays();
+            }
+
+            await LoadEventsAsync();
+        }
+        finally
+        {
+            isCreatingActionItem = false;
+        }
+    }
+
+    private async Task LoadInviteesForEventAsync(CalendarEvent organizerEvent)
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        var inviteeRows = await db.CalendarEvent
+            .Where(e => e.CreatedById == organizerEvent.CreatedById &&
+                        e.EmployeeId != organizerEvent.CreatedById &&
+                        e.Title == organizerEvent.Title &&
+                        e.StartTime == organizerEvent.StartTime &&
+                        e.EndTime == organizerEvent.EndTime)
+            .ToListAsync();
+
+        var empLookup = allEmployees.ToDictionary(e => e.Id, e => e.Email ?? e.UserName ?? e.Id.ToString());
+
+        viewingInvitees = inviteeRows
+            .Select(r => new InviteeRsvpItem(
+                empLookup.TryGetValue(r.EmployeeId, out var name) ? name : r.EmployeeId.ToString(),
+                ExtractRsvpStatus(r.Description)))
+            .OrderBy(i => i.DisplayName)
+            .ToList();
+    }
+
+    private async Task RespondToInvitationAsync(CalendarEvent ev, RsvpStatus status)
+    {
+        if (isUpdatingRsvp || string.IsNullOrEmpty(currentEmployeeId)) return;
+        isUpdatingRsvp = true;
+
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var empGuid = Guid.Parse(currentEmployeeId);
+
+            var target = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == ev.Id);
+            if (target != null)
+            {
+                target.Description = ApplyRsvpTag(target.Description, status);
+                viewingEvent = target;
+            }
+
+            if (ev.CreatedById != Guid.Empty && ev.CreatedById != empGuid)
+            {
+                var organizerCopies = await db.CalendarEvent
+                    .Where(e => e.EmployeeId == ev.CreatedById &&
+                                e.CreatedById == ev.CreatedById &&
+                                e.Title == ev.Title &&
+                                e.StartTime == ev.StartTime &&
+                                e.EndTime == ev.EndTime)
+                    .ToListAsync();
+
+                foreach (var orgCopy in organizerCopies)
+                {
+                    orgCopy.Description = ApplyRsvpTag(orgCopy.Description, status);
+                }
+            }
+
+            await db.SaveChangesAsync();
+            await LoadEventsAsync();
+        }
+        finally
+        {
+            isUpdatingRsvp = false;
+        }
     }
 
     private void CloseDetailsModal()
     {
         showDetailsModal = false;
         viewingEvent = null;
+        viewingInvitees.Clear();
+        meetingActionItems.Clear();
+        meetingNotesDraft = string.Empty;
+        actionItemTitle = string.Empty;
+        recapStatusMessage = string.Empty;
     }
 
     private void StartMoveFromDetails(Guid eventId)
@@ -840,8 +1646,30 @@
         if (ev != null)
         {
             var duration = ev.EndTime - ev.StartTime;
-            ev.StartTime = targetSlotTime;
-            ev.EndTime = targetSlotTime + duration;
+            var newStart = targetSlotTime;
+            var newEnd = targetSlotTime + duration;
+
+            if (IsMeetingCategory(ev.Category))
+            {
+                var conflictingMeeting = await FindConflictingMeetingAsync(
+                    db,
+                    new[] { ev.EmployeeId },
+                    newStart,
+                    newEnd,
+                    excludeEventId: ev.Id);
+
+                if (conflictingMeeting != null)
+                {
+                    toastMessage = $"Nu poți muta meeting-ul peste \"{conflictingMeeting.Title}\" ({conflictingMeeting.StartTime:HH:mm} - {conflictingMeeting.EndTime:HH:mm}).";
+                    toastType = "warning";
+                    selectedEventId = Guid.Empty;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            ev.StartTime = newStart;
+            ev.EndTime = newEnd;
             await db.SaveChangesAsync();
         }
 
@@ -849,15 +1677,121 @@
         await LoadEventsAsync();
     }
 
-    private async Task DeleteEvent(Guid eventId)
+    private async Task RequestDeleteEvent(CalendarEvent ev)
     {
+        if (isDeleting) return;
+
+        using var db = await DbFactory.CreateDbContextAsync();
+        var seriesCount = await CountSeriesOccurrencesAsync(db, ev);
+
+        if (seriesCount > 1)
+        {
+            pendingDeleteEvent = ev;
+            showDeleteSeriesModal = true;
+            return;
+        }
+
+        await ExecuteDeleteAsync(ev.Id, deleteEntireSeries: false);
+    }
+
+    private void CancelDeleteSeriesModal()
+    {
+        if (isDeleting) return;
+        showDeleteSeriesModal = false;
+        pendingDeleteEvent = null;
+    }
+
+    private async Task ConfirmDeleteOccurrenceAsync(Guid eventId, bool deleteEntireSeries)
+    {
+        await ExecuteDeleteAsync(eventId, deleteEntireSeries);
+        showDeleteSeriesModal = false;
+        pendingDeleteEvent = null;
+    }
+
+    private async Task<int> CountSeriesOccurrencesAsync(ChronusDbContext db, CalendarEvent ev)
+    {
+        var duration = ev.EndTime - ev.StartTime;
+        var startTod = ev.StartTime.TimeOfDay;
+        var normTitle = (ev.Title ?? string.Empty).Trim();
+        var normCat = (ev.Category ?? string.Empty).Trim();
+        var normDesc = StripRsvpTag(ev.Description);
+
+        var matches = await db.CalendarEvent
+            .Where(e => e.EmployeeId == ev.EmployeeId &&
+                        e.CreatedById == ev.CreatedById &&
+                        e.Title == normTitle &&
+                        (e.Category ?? string.Empty) == normCat)
+            .ToListAsync();
+
+        return matches.Count(e =>
+            e.StartTime.TimeOfDay == startTod &&
+            (e.EndTime - e.StartTime) == duration &&
+            StripRsvpTag(e.Description) == normDesc);
+    }
+
+    private async Task ExecuteDeleteAsync(Guid eventId, bool deleteEntireSeries)
+    {
+        if (isDeleting) return;
+        isDeleting = true;
+
         try
         {
             using var db = await DbFactory.CreateDbContextAsync();
 
-            // 1. Ștergem eventualele înregistrări de prezență legate de acest event/meeting
+            var anchor = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == eventId);
+            if (anchor == null) return;
+
+            List<CalendarEvent> toDelete;
+
+            if (deleteEntireSeries)
+            {
+                var duration = anchor.EndTime - anchor.StartTime;
+                var startTod = anchor.StartTime.TimeOfDay;
+                var normTitle = (anchor.Title ?? string.Empty).Trim();
+                var normCat = (anchor.Category ?? string.Empty).Trim();
+                var normDesc = StripRsvpTag(anchor.Description);
+
+                var creatorCandidates = await db.CalendarEvent
+                    .Where(e => e.CreatedById == anchor.CreatedById &&
+                                e.Title == normTitle &&
+                                (e.Category ?? string.Empty) == normCat)
+                    .ToListAsync();
+
+                toDelete = creatorCandidates
+                    .Where(e =>
+                        e.StartTime.TimeOfDay == startTod &&
+                        (e.EndTime - e.StartTime) == duration &&
+                        StripRsvpTag(e.Description) == normDesc)
+                    .ToList();
+            }
+            else
+            {
+                var normTitle = (anchor.Title ?? string.Empty).Trim();
+                var normCat = (anchor.Category ?? string.Empty).Trim();
+                var normDesc = StripRsvpTag(anchor.Description);
+
+                var sameSlotCandidates = await db.CalendarEvent
+                    .Where(e => e.CreatedById == anchor.CreatedById &&
+                                e.StartTime == anchor.StartTime &&
+                                e.EndTime == anchor.EndTime &&
+                                e.Title == normTitle &&
+                                (e.Category ?? string.Empty) == normCat)
+                    .ToListAsync();
+
+                toDelete = sameSlotCandidates
+                    .Where(e => StripRsvpTag(e.Description) == normDesc)
+                    .ToList();
+
+                if (!toDelete.Any())
+                {
+                    toDelete = new List<CalendarEvent> { anchor };
+                }
+            }
+
+            var targetIds = toDelete.Select(e => e.Id).ToList();
+
             var attendances = await db.MeetingAttendances
-                .Where(a => a.Id == eventId)
+                .Where(a => targetIds.Contains(a.Id))
                 .ToListAsync();
 
             if (attendances.Any())
@@ -865,15 +1799,10 @@
                 db.MeetingAttendances.RemoveRange(attendances);
             }
 
-            // 2. Ștergem event-ul propriu-zis
-            var ev = await db.CalendarEvent.FirstOrDefaultAsync(e => e.Id == eventId);
-            if (ev != null)
-            {
-                db.CalendarEvent.Remove(ev);
-                await db.SaveChangesAsync();
-            }
+            db.CalendarEvent.RemoveRange(toDelete);
+            await db.SaveChangesAsync();
 
-            if (selectedEventId == eventId)
+            if (targetIds.Contains(selectedEventId))
             {
                 selectedEventId = Guid.Empty;
             }
@@ -886,7 +1815,12 @@
             toastType = "warning";
             StateHasChanged();
         }
+        finally
+        {
+            isDeleting = false;
+        }
     }
+
     private string GetPriorityColor(AgendaPriority priority) => priority switch
     {
         AgendaPriority.High => "#ef4444",
@@ -899,5 +1833,19 @@
         AgendaPriority.High => "bg-danger",
         AgendaPriority.Normal => "bg-primary",
         _ => "bg-success"
+    };
+
+    private static string GetRsvpBadgeClass(RsvpStatus status) => status switch
+    {
+        RsvpStatus.Accepted => "bg-success",
+        RsvpStatus.Declined => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private static string GetRsvpIconClass(RsvpStatus status) => status switch
+    {
+        RsvpStatus.Accepted => "bi-check-circle-fill text-success",
+        RsvpStatus.Declined => "bi-x-circle-fill text-danger",
+        _ => "bi-envelope-fill text-secondary"
     };
 }
